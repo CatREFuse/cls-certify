@@ -1,14 +1,14 @@
 # CLS-Certify v2.0 - Next Generation Skill Security Certification
 
-> 企业级 Skill 安全检测与认证系统，提供多维度深度分析和结构化报告输出
+> 面向所有支持 Skill 的 Agent 平台的安全检测与认证系统，提供多维度深度分析和结构化报告输出
 
 ---
 
 ## 项目来源
 
-**本项目由内部 [BSS (Berry Skills Safe) Certify](https://github.com/CatREFuse/bss-certify) 系统升级而来。**
+**本项目由 [CocoLoop](https://github.com/AidenYangX) 内部 Skill 安全检测引擎 [BSS (Berry Skills Safe) Certify](https://github.com/CatREFuse/bss-certify) 升级而来。**
 
-BSS Certify 是一套面向 Claude Code Agent Skills 的安全认证工具，提供基础的多维安全评估和 S+~D 评级体系。CLS-Certify v2.0 在 BSS 的基础上进行了全面的架构重构和能力升级，以满足日益增长的 Skill 生态安全需求。
+BSS Certify 是 CocoLoop 平台内部使用的 Skill 安全检测引擎，专注于对 Agent Skills 进行安全评估和 S+~D 评级。CLS-Certify v2.0 在 BSS 的基础上进行了全面的架构重构和能力升级，**不再局限于单一平台，而是面向所有支持 Skill 的 Agent 平台**（如 Claude Code、OpenAI Agents、Cursor、Windsurf 等），提供通用的 Skill 安全认证能力。
 
 ---
 
@@ -20,7 +20,7 @@ BSS Certify 是一套面向 Claude Code Agent Skills 的安全认证工具，提
 | **威胁模式** | 15+ 基础正则匹配 | **40+ 专业威胁模式**（含 AI 安全、供应链攻击、SSRF 等） | +167% |
 | **敏感数据检测** | 10+ 基础模式 | **50+ 检测模式**（覆盖 API Key、Token、私钥、连接串等） | +400% |
 | **API 审计** | 无 | **14 类 API 自动分类 + 风险评级**（云服务、AI、广告、支付等） | 全新能力 |
-| **报告格式** | 纯 Markdown 基础报告 | **多格式结构化输出**（Markdown + JSON + SARIF + HTML） | 全面升级 |
+| **报告格式** | 纯 Markdown 基础报告 | **多格式结构化输出**（Markdown + JSON + SARIF + HTML + PDF） | 全面升级 |
 | **报告内容** | 简单通过/警告/危险状态 | **三大核心报告**：评级内容 + 敏感风险点列举 + 外部 API 清单 | 全面升级 |
 | **团队协作** | 单人单流程维护 | **6 个专业子团队并行协作架构** | 全新能力 |
 | **检测精度** | 基础正则匹配，误报率 ~15% | **熵值分析 + 上下文感知**，误报率 <5%，漏报率 <1% | 大幅提升 |
@@ -146,6 +146,7 @@ cls-certify/
 | JSON | `.json` | 机器解析、自动化集成 |
 | SARIF | `.sarif` | GitHub/CodeQL 兼容 |
 | HTML | `.html` | 可视化展示 |
+| **PDF** | `.pdf` | **正式报告归档、分享与打印** |
 
 ---
 
@@ -318,6 +319,7 @@ report_config:
     - markdown
     - json
     - sarif
+    - pdf
 
   detail_level: full  # full | summary | minimal
 

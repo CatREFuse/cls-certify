@@ -5,6 +5,7 @@ description: CocoLoop Safe (CLS) Skill 安全认证。对 Agent Skills 进行六
 metadata:
   author: tanshow
 batch_mode: false
+output_dir: ~/Downloads
 ---
 
 # CLS-Certify v2.0 - 下一代 Skill 安全认证
@@ -693,8 +694,9 @@ find {skill_path} -type f ! -path '*/.git/*' | sort | xargs cat | shasum -a 256 
 
 **流程**：
 
-1. **自动保存 Markdown 报告到桌面** — 确保原始数据不丢失
-   - 路径: `~/Desktop/CLS-v2-{skill-name}-{评级}-{时间戳}.md`
+1. **自动保存 Markdown 报告** — 确保原始数据不丢失
+   - 保存到 `output_dir` 指定的目录（默认 `~/Downloads`）
+   - 路径: `{output_dir}/CLS-v2-{skill-name}-{评级}-{时间戳}.md`
 
 2. **检查 `batch_mode` 开关**：
    - 若 YAML frontmatter 中 `batch_mode: true`：**跳过所有用户询问**，仅输出 Markdown 报告，直接进入步骤 4 展示摘要
@@ -723,10 +725,10 @@ find {skill_path} -type f ! -path '*/.git/*' | sort | xargs cat | shasum -a 256 
 
 5. **打开报告并展示摘要** — 用 `open` 命令打开生成的报告（batch_mode 下仅输出文字摘要，不调用 `open`）
 
-**保存路径格式**:
-- Markdown: `~/Desktop/CLS-v2-{skill-name}-{评级}-{时间戳}.md`
-- HTML: `~/Desktop/CLS-v2-{skill-name}-{评级}-{时间戳}.html`
-- PDF: `~/Desktop/CLS-v2-{skill-name}-{评级}-{时间戳}.pdf`
+**保存路径格式**（`{output_dir}` 由 YAML frontmatter 中的 `output_dir` 决定，默认 `~/Downloads`）:
+- Markdown: `{output_dir}/CLS-v2-{skill-name}-{评级}-{时间戳}.md`
+- HTML: `{output_dir}/CLS-v2-{skill-name}-{评级}-{时间戳}.html`
+- PDF: `{output_dir}/CLS-v2-{skill-name}-{评级}-{时间戳}.pdf`
 
 #### 4.5 渲染脚本
 

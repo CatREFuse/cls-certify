@@ -698,9 +698,9 @@ find {skill_path} -type f ! -path '*/.git/*' | sort | xargs cat | shasum -a 256 
    - 保存到 `output_dir` 指定的目录（默认 `~/Downloads`）
    - 路径: `{output_dir}/CLS-v2-{skill-name}-{评级}-{时间戳}.md`
 
-2. **检查 `batch_mode` 开关**：
-   - 若 YAML frontmatter 中 `batch_mode: true`：**跳过所有用户询问**，仅输出 Markdown 报告，直接进入步骤 4 展示摘要
-   - 若 `batch_mode: false`（默认）：继续步骤 3 询问用户
+2. **检查 `batch_mode` 开关**（别名：静默模式）：
+   - 若 YAML frontmatter 中 `batch_mode: true`，或用户指令中包含"静默模式"、"batch mode"、"不要问我"等表述：**跳过所有用户询问**，仅输出 Markdown 报告，直接进入步骤 5 展示摘要
+   - 若 `batch_mode: false`（默认）且用户未要求静默：继续步骤 3 询问用户
 
 3. **询问用户输出格式**（仅 `batch_mode: false` 时执行） — 使用 AskUserQuestion 让用户多选：
 

@@ -132,6 +132,10 @@ git clone https://github.com/CatREFuse/cls-certify.git ~/.claude/skills/cls-cert
 ```
 
 ```
+静默模式检查 my-skill，不要问我问题
+```
+
+```
 把报告保存到桌面，检查 my-skill 的安全性
 ```
 

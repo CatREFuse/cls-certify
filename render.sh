@@ -393,9 +393,7 @@ cp "$TEMPLATE" "$OUTPUT"
 replace_placeholder() {
   local key="$1"
   local value="$2"
-  # 转义 perl 特殊字符
-  value=$(echo "$value" | sed 's/\\/\\\\/g; s/\$/\\$/g; s/@/\\@/g')
-  perl -pi -e "s|\Q{{${key}}}\E|${value}|g" "$OUTPUT"
+  CLS_REPLACE_VALUE="$value" perl -pi -e 's/\Q{{'"$key"'}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 }
 
 replace_placeholder "report_id" "$REPORT_ID"
@@ -421,25 +419,25 @@ replace_placeholder "radar_stroke_color" "$RADAR_STROKE"
 replace_placeholder "api_count" "$API_COUNT"
 replace_placeholder "findings_count" "$FINDINGS_COUNT"
 
-# 复合 HTML 片段用 perl 直接替换（避免 shell 转义）
-perl -pi -e "s|\Q{{trust_level_tag}}\E|${TRUST_TAG}|g" "$OUTPUT"
-perl -pi -e "s|\Q{{license_tag}}\E|${LICENSE_TAG}|g" "$OUTPUT"
-perl -pi -e "s|\Q{{evaluation}}\E|${EVALUATION}|g" "$OUTPUT"
-perl -pi -e "s|\Q{{PATTERN_TAGS_HTML}}\E|${TAGS_HTML}|g" "$OUTPUT"
-perl -pi -e "s|\Q{{SUMMARY_HTML}}\E|${SUMMARY_HTML}|g" "$OUTPUT"
-perl -pi -e "s|\Q{{RADAR_POLYGON_POINTS}}\E|${POLYGON_POINTS}|g" "$OUTPUT"
-perl -pi -e "s|\Q{{RADAR_DOTS_HTML}}\E|${DOTS_HTML}|g" "$OUTPUT"
-perl -pi -e "s|\Q{{RADAR_LEGEND_HTML}}\E|${LEGEND_HTML}|g" "$OUTPUT"
-perl -pi -e "s|\Q{{APIS_HTML}}\E|${APIS_HTML}|g" "$OUTPUT"
-perl -pi -e "s|\Q{{FINDINGS_HTML}}\E|${FINDINGS_HTML}|g" "$OUTPUT"
-perl -pi -e "s|\Q{{COMPLIANCE_HTML}}\E|${COMPLIANCE_HTML}|g" "$OUTPUT"
-perl -pi -e "s|\Q{{RECOMMENDATIONS_HTML}}\E|${RECOMMENDATIONS_HTML}|g" "$OUTPUT"
+# 复合 HTML 片段同样用环境变量传值（避免 shell/perl 双层解释）
+CLS_REPLACE_VALUE="$TRUST_TAG" perl -pi -e 's/\Q{{trust_level_tag}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$LICENSE_TAG" perl -pi -e 's/\Q{{license_tag}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$EVALUATION" perl -pi -e 's/\Q{{evaluation}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$TAGS_HTML" perl -pi -e 's/\Q{{PATTERN_TAGS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$SUMMARY_HTML" perl -pi -e 's/\Q{{SUMMARY_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$POLYGON_POINTS" perl -pi -e 's/\Q{{RADAR_POLYGON_POINTS}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$DOTS_HTML" perl -pi -e 's/\Q{{RADAR_DOTS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$LEGEND_HTML" perl -pi -e 's/\Q{{RADAR_LEGEND_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$APIS_HTML" perl -pi -e 's/\Q{{APIS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$FINDINGS_HTML" perl -pi -e 's/\Q{{FINDINGS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$COMPLIANCE_HTML" perl -pi -e 's/\Q{{COMPLIANCE_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$RECOMMENDATIONS_HTML" perl -pi -e 's/\Q{{RECOMMENDATIONS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 
 # ─── 验证 ───
 REMAINING=$(grep -c '{{' "$OUTPUT" || true)
 if [[ "$REMAINING" -gt 0 ]]; then
   echo "⚠ 警告: HTML 中仍有 ${REMAINING} 个未替换的占位符:" >&2
-  grep -oE '\{\{[a-zA-Z_]+\}\}' "$OUTPUT" | sort -u >&2
+  grep -oE '\{\{[a-zA-Z0-9_]+\}\}' "$OUTPUT" | sort -u >&2
 fi
 
 echo "✓ HTML 报告已生成: $OUTPUT"
@@ -476,7 +474,7 @@ if [[ "$GENERATE_PDF" -eq 1 ]]; then
       --print-to-pdf="$PDF_OUTPUT" \
       --no-pdf-header-footer \
       --run-all-compositor-stages-before-draw \
-      --virtual-time-budget=8000 \
+      --virtual-time-budget=15000 \
       "$FILE_URL" \
       2>/dev/null
 

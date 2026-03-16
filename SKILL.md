@@ -678,6 +678,16 @@ S+ 级
 - [ ] `## findings` 中每个 `### RISK-xxx` 至少包含 severity/category/title/location/description/recommendation
 - [ ] `## external_apis` 表格包含 endpoint/method/reputation/encryption/data_types/provider 六列
 
+#### 4.3a sample_hash 计算规则
+
+对被检 skill 的**所有文件**计算联合 SHA256 哈希，确保任何文件的变动都能反映在哈希值中：
+
+```bash
+find {skill_path} -type f ! -path '*/.git/*' | sort | xargs cat | shasum -a 256 | cut -d' ' -f1
+```
+
+输出格式: `sha256:{完整64位哈希}`
+
 #### 4.4 报告保存与输出策略
 
 **流程**：

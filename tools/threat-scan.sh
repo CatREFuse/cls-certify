@@ -17,6 +17,7 @@ set -euo pipefail
 OUTPUT_JSON=false
 TARGET=""
 FILTER_CATEGORY=""
+CONTEXT_LINES=3
 
 # ─── 颜色 ───
 RED='\033[0;31m'
@@ -49,6 +50,7 @@ usage() {
     echo "选项:"
     echo "  --json                 输出 JSON 格式"
     echo "  --category <category>  过滤检测类别"
+    echo "  --context <N>          上下文行数 (默认: 3)"
     echo "  -h, --help             显示帮助"
     echo ""
     echo "支持的类别:"
@@ -68,6 +70,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --json) OUTPUT_JSON=true; shift ;;
         --category) FILTER_CATEGORY="$2"; shift 2 ;;
+        --context) CONTEXT_LINES="$2"; shift 2 ;;
         -h|--help) usage ;;
         -*) echo "未知选项: $1"; usage ;;
         *) TARGET="$1"; shift ;;
@@ -277,16 +280,27 @@ escape_json() {
     echo "$str"
 }
 
+# ─── 上下文提取（在 scan_file 内使用 file_lines 数组） ───
+# 注意：macOS bash 3.2 不支持 nameref，上下文提取直接在 scan_file 中操作 file_lines
+
 # ─── 扫描单个文件 ───
 TOTAL_FINDINGS=0
 JSON_ITEMS=""
 
 scan_file() {
     local file="$1"
-    local line_num=0
 
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        line_num=$((line_num + 1))
+    # 先将文件读入数组（用于上下文提取）
+    local file_lines=()
+    while IFS= read -r l || [[ -n "$l" ]]; do
+        file_lines+=("$l")
+    done < "$file"
+
+    local total_lines=${#file_lines[@]}
+
+    for ((idx=0; idx<total_lines; idx++)); do
+        local line="${file_lines[$idx]}"
+        local line_num=$((idx + 1))
 
         for pattern_def in "${THREAT_PATTERNS[@]}"; do
             parse_pattern "$pattern_def"
@@ -313,21 +327,42 @@ scan_file() {
                 local evidence
                 evidence=$(truncate_evidence "$trimmed_line")
 
+                # 提取上下文（直接操作 file_lines 数组，兼容 bash 3.2）
+                local ctx_before="" ctx_after=""
+                local ctx_start=$((idx - CONTEXT_LINES))
+                [[ $ctx_start -lt 0 ]] && ctx_start=0
+                for ((ci=ctx_start; ci<idx; ci++)); do
+                    local esc_ctx
+                    esc_ctx=$(escape_json "${file_lines[$ci]}")
+                    if [[ -n "$ctx_before" ]]; then
+                        ctx_before="${ctx_before},\"$esc_ctx\""
+                    else
+                        ctx_before="\"$esc_ctx\""
+                    fi
+                done
+                local ctx_end=$((idx + CONTEXT_LINES))
+                [[ $ctx_end -ge $total_lines ]] && ctx_end=$((total_lines - 1))
+                for ((ci=idx+1; ci<=ctx_end; ci++)); do
+                    local esc_ctx
+                    esc_ctx=$(escape_json "${file_lines[$ci]}")
+                    if [[ -n "$ctx_after" ]]; then
+                        ctx_after="${ctx_after},\"$esc_ctx\""
+                    else
+                        ctx_after="\"$esc_ctx\""
+                    fi
+                done
+
                 if $OUTPUT_JSON; then
-                    local escaped_evidence
+                    local escaped_evidence escaped_file escaped_desc escaped_impact escaped_rec
                     escaped_evidence=$(escape_json "$evidence")
-                    local escaped_file
                     escaped_file=$(escape_json "$file")
-                    local escaped_desc
                     escaped_desc=$(escape_json "$P_DESCRIPTION")
-                    local escaped_impact
                     escaped_impact=$(escape_json "$P_IMPACT")
-                    local escaped_rec
                     escaped_rec=$(escape_json "$P_RECOMMENDATION")
 
                     local item
-                    item=$(printf '{"id":"THREAT-%03d","file":"%s","line":%d,"severity":"%s","category":"%s","pattern_id":"%s","pattern_name":"%s","description":"%s","evidence":"%s","impact":"%s","recommendation":"%s"}' \
-                        "$TOTAL_FINDINGS" "$escaped_file" "$line_num" "$current_severity" "$P_CATEGORY" "$P_PATTERN_ID" "$P_PATTERN_NAME" "$escaped_desc" "$escaped_evidence" "$escaped_impact" "$escaped_rec")
+                    item=$(printf '{"id":"THREAT-%03d","file":"%s","line":%d,"severity":"%s","category":"%s","pattern_id":"%s","pattern_name":"%s","description":"%s","evidence":"%s","impact":"%s","recommendation":"%s","verified":false,"context_before":[%s],"context_after":[%s]}' \
+                        "$TOTAL_FINDINGS" "$escaped_file" "$line_num" "$current_severity" "$P_CATEGORY" "$P_PATTERN_ID" "$P_PATTERN_NAME" "$escaped_desc" "$escaped_evidence" "$escaped_impact" "$escaped_rec" "$ctx_before" "$ctx_after")
 
                     if [[ -n "$JSON_ITEMS" ]]; then
                         JSON_ITEMS="${JSON_ITEMS},${item}"
@@ -342,16 +377,32 @@ scan_file() {
                         medium)   color="$MAGENTA" ;;
                         *)        color="$GREEN" ;;
                     esac
-                    printf "  ${color}[%s]${RESET} ${BOLD}%s${RESET}:%d  category=${CYAN}%s${RESET}  pattern=${DIM}%s${RESET}\n" \
-                        "$current_severity" "$file" "$line_num" "$P_CATEGORY" "$P_PATTERN_NAME"
-                    printf "         %s\n\n" "$evidence"
+
+                    # 显示上下文 before
+                    local ctx_start=$((idx - CONTEXT_LINES))
+                    [[ $ctx_start -lt 0 ]] && ctx_start=0
+                    for ((ci=ctx_start; ci<idx; ci++)); do
+                        printf "  ${DIM}%4d │ %s${RESET}\n" "$((ci+1))" "${file_lines[$ci]}"
+                    done
+
+                    # 显示命中行
+                    printf "  ${color}%4d │ %s${RESET}  ${color}← [%s] %s / %s${RESET}\n" \
+                        "$line_num" "$trimmed_line" "$current_severity" "$P_CATEGORY" "$P_PATTERN_NAME"
+
+                    # 显示上下文 after
+                    local ctx_end=$((idx + CONTEXT_LINES))
+                    [[ $ctx_end -ge $total_lines ]] && ctx_end=$((total_lines - 1))
+                    for ((ci=idx+1; ci<=ctx_end; ci++)); do
+                        printf "  ${DIM}%4d │ %s${RESET}\n" "$((ci+1))" "${file_lines[$ci]}"
+                    done
+                    echo ""
                 fi
 
-                # 一行只匹配一个模式后跳出（避免重复报告同一行）
+                # 一行只匹配一个模式后跳出
                 break
             fi
         done
-    done < "$file"
+    done
 }
 
 # ─── 构建 find 排除参数 ───

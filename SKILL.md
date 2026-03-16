@@ -62,9 +62,17 @@ SKILL.md 中的代码块需要单独提取和安全检查：
 
 ---
 
-### 阶段 1.5: 硬编码快检（CLS Shield 集成）
+### 阶段 1.5: 硬编码快检 + 意图验证（两步检测）
 
-在进入深度分析前，使用 `references/` 中的正则模式对 skill 代码做快速匹配，预筛可疑和有害模式。
+威胁检测采用两步流程，避免纯正则匹配的误报问题（如文档中描述检测规则的文字被误判为威胁）。
+
+#### Step 1: 硬编码候选匹配（bash 脚本）
+
+使用 `tools/threat-scan.sh` 对 skill 代码做正则匹配，输出候选命中及上下文：
+
+```bash
+bash {skill_path}/tools/threat-scan.sh {target_path} --json --context 3 > /tmp/candidates.json
+```
 
 **快检维度**：
 1. **危险函数匹配** — eval/exec/system/child_process 等
@@ -74,14 +82,31 @@ SKILL.md 中的代码块需要单独提取和安全检查：
 5. **提示词投毒** — HTML 注释、零宽字符、角色覆写
 6. **权限升级诱导** — dangerouslyDisableSandbox、sudo 等
 
-**输出分级**：
-- **suspicious**（可疑）：匹配发生在 test/example/comment 中，或上下文不明确
-- **harmful**（有害）：匹配发生在主代码中，模式明确指向恶意行为
+每个候选命中包含 `context_before` 和 `context_after`（前后各 3 行），以及 `"verified": false` 标记。
 
-**用途**：
-- 快检结果作为后续深度分析的参考输入
-- 在 CLS Shield 桌面应用中，当 AI Agent 不可用时作为降级检测方案
-- AI 深度分析阶段可参考快检标记的可疑文件，优先审查
+#### Step 2: Agent 意图验证（AI 推理）
+
+使用 `tools/threat-verify.sh` 生成验证 prompt，Agent 逐条审查候选命中的真实意图：
+
+```bash
+bash {skill_path}/tools/threat-verify.sh /tmp/candidates.json
+```
+
+Agent 根据上下文对每条候选做出判定：
+- **confirmed** — 确认威胁，实际执行危险操作 → 保留并传入评分
+- **false_positive** — 误报，文档中描述/列举检测规则 → 排除
+- **low_risk** — 测试/示例代码中的引用 → 降低严重性
+- **comment** — 注释中的说明文字 → 排除
+
+**判定依据**：
+- 关键词出现在 `.md` 文件的反引号（`` ` ``）中 → 高概率误报
+- 关键词出现在列表项（`- 检测 eval()`）中 → 高概率文档描述
+- 关键词出现在 `.js/.py/.sh` 等代码文件的非注释行 → 高概率真实威胁
+- 关键词周围有 "检测"、"check"、"detect"、"scan" 等字样 → 高概率误报
+
+**输出**：仅将 `confirmed` 的威胁传入 `tools/score-calc.sh` 进行最终评分。
+
+**降级模式**：当 AI Agent 不可用时（如 CLS Shield 桌面应用），直接使用 Step 1 的原始候选结果作为降级检测方案。
 
 ---
 

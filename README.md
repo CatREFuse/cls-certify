@@ -1,43 +1,72 @@
 # CLS-Certify - Agent Skill 安全认证系统
 
-> 面向所有支持 Skill 的 Agent 平台，提供六维深度安全分析和结构化报告输出
+> 面向所有支持 Skill 的 Agent 平台，提供六维深度安全分析和 S+ ~ D 等级评估
 
-CLS-Certify 是一个开源的 Agent Skill 安全认证工具，对 Skill 进行静态代码、动态行为、依赖审计、网络流量、隐私合规、威胁情报六个维度的深度分析，输出 S+ ~ D 等级评估和 HTML/PDF 可视化报告。
-
-适用平台：Claude Code、OpenAI Agents、Cursor、Windsurf 等所有支持 Skill 的 Agent 平台。
+适用平台：Claude Code / OpenAI Agents / Cursor / Windsurf 等
 
 ---
 
-## 快速开始
+## 检测维度与检查项
 
-### 安装
+### 维度 1: 静态代码分析
 
-**通过 cocoloop 安装（推荐）**
-```bash
-cocoloop install cls-certify
-```
+| 检查项 | 说明 | 相关文件 |
+|-------|------|---------|
+| 危险函数检测 | eval/exec/system/child_process 等 | `tools/threat-scan.sh` |
+| 敏感信息泄露 | API Key、密码、私钥、连接串（50+ 模式） | `tools/secret-scan.sh`, `references/sensitive-data-patterns.md` |
+| 威胁模式匹配 | 40+ 攻击向量（注入、外泄、SSRF 等） | `tools/threat-scan.sh`, `references/threat-patterns.md` |
+| 代码混淆检测 | 高熵字符串、Unicode 转义、Base64 嵌套 | `tools/entropy-detect.sh` |
+| 动态代码下载 | L0-L3 嵌套深度追踪，L2+ 强制 D 级 | `tools/threat-scan.sh` |
+| 提示词投毒 | HTML 注释隐藏指令、零宽字符、角色覆写 | `tools/threat-scan.sh`, `tools/threat-verify.sh` |
+| 权限升级诱导 | dangerouslyDisableSandbox、sudo 诱导 | `tools/threat-scan.sh` |
+| 隐蔽信息外传 | DNS 外带、Git 外传、编码外传、剪贴板 | `tools/threat-scan.sh` |
+| 延迟/条件触发 | 时间、计数、环境条件下的隐藏恶意 | `tools/threat-scan.sh` |
+| 功能-行为一致性 | 声明功能与实际代码行为偏离度分析 | Agent 语义分析 |
+| MCP 工具滥用 | 通过提示词引导 agent 滥用 MCP 工具 | Agent 语义分析 |
 
-**手动安装**
-```bash
-git clone https://github.com/CatREFuse/cls-certify.git ~/.claude/skills/cls-certify
-```
+### 维度 2: 动态行为分析
 
-### 使用
+| 检查项 | 说明 | 相关文件 |
+|-------|------|---------|
+| 沙箱执行监控 | 隔离环境中监控文件/网络/进程行为 | Agent 运行时分析 |
+| 文件系统监控 | 敏感目录访问检测（~/.ssh, /etc 等） | Agent 运行时分析 |
+| 网络请求捕获 | 外发 HTTP/HTTPS 请求拦截分析 | Agent 运行时分析 |
+| 输入验证测试 | 提示词注入、越权访问、路径遍历测试 | Agent 运行时分析 |
 
-安装后在 Agent 对话中直接使用：
+### 维度 3: 依赖审计
 
-```
-# 检查本地 Skill
-检查 /path/to/skill 的安全性
+| 检查项 | 说明 | 相关文件 |
+|-------|------|---------|
+| CVE 漏洞扫描 | 对接 NVD 数据库检测已知漏洞 | `tools/dep-audit.sh`, `references/cve-sources.md` |
+| 恶意包检测 | Typosquatting、维护状态、下载量异常 | `tools/dep-audit.sh` |
+| 依赖树分析 | 直接/传递依赖风险，漏洞传播路径 | `tools/dep-audit.sh` |
+| 版本锁定检查 | 依赖版本固定与安全性评估 | `tools/dep-audit.sh` |
 
-# 检查已安装的 Skill
-检查 skill-name 的安全性
+### 维度 4: 网络流量分析
 
-# 检查 GitHub 上的 Skill
-检查 https://github.com/user/skill-repo 的安全性
-```
+| 检查项 | 说明 | 相关文件 |
+|-------|------|---------|
+| API 分类与风险评级 | 14 类外部 API 自动识别分类 | `tools/url-audit.sh`, `references/api-classification.md` |
+| 数据传输审计 | 敏感字段传输检测（token, password, key） | `tools/url-audit.sh` |
+| 域名信誉检查 | 短链接、纯 IP、动态 DNS、可疑 TLD | `tools/url-audit.sh` |
+| TLS 验证 | 加密协议版本和证书检查 | `tools/url-audit.sh` |
 
-CLS-Certify 会自动执行六维分析，输出评级报告。
+### 维度 5: 隐私合规检查
+
+| 检查项 | 说明 | 相关文件 |
+|-------|------|---------|
+| 数据收集审查 | 超出功能范围的数据收集识别 | Agent 语义分析 |
+| 环境变量访问分级 | 低/中/高/极高四级分类评估 | Agent 语义分析 |
+| 权限申请审查 | 与功能不匹配的过度权限识别 | Agent 语义分析 |
+| GDPR/CCPA 合规 | 用户同意、数据删除权利、可携带性 | `references/gdpr-checklist.md` |
+
+### 维度 6: 来源信誉与威胁情报
+
+| 检查项 | 说明 | 相关文件 |
+|-------|------|---------|
+| GitHub 仓库信誉 | Star、年龄、作者、提交活跃度评估 | `tools/github-repo-check.sh` |
+| URL/域名信誉 | 代码中所有 URL 的安全性检查 | `tools/url-audit.sh` |
+| 已知恶意模式比对 | 黑名单、恶意代码指纹、钓鱼模式 | `references/known-malicious-patterns.md` |
 
 ---
 
@@ -54,55 +83,113 @@ CLS-Certify 会自动执行六维分析，输出评级报告。
 
 ---
 
-## 六维检测体系
+## 安装
 
-### 1. 静态代码分析
-危险函数检测、敏感信息泄露（50+ 模式）、威胁模式匹配（40+ 模式）、代码混淆检测、动态代码下载深度追踪（L0-L3）
+**通过 cocoloop 安装（推荐）**
 
-### 2. 动态行为分析
-沙箱执行监控、文件系统访问检测、网络请求捕获、提示词注入测试
+```bash
+cocoloop install cls-certify
+```
 
-### 3. 依赖审计
-CVE 漏洞扫描、Typosquatting 恶意包检测、依赖树分析、版本锁定检查
+**手动安装**
 
-### 4. 网络流量分析
-14 类外部 API 自动分类与风险评级、数据传输审计、域名信誉检查、TLS 验证
-
-### 5. 隐私合规检查
-数据收集审查、权限申请审查、GDPR/CCPA 合规检查、用户控制机制评估
-
-### 6. 威胁情报关联
-IoC 匹配、已知恶意行为模式识别、情报源集成
+```bash
+git clone https://github.com/CatREFuse/cls-certify.git ~/.claude/skills/cls-certify
+```
 
 ---
 
-## 报告输出
+## 使用方式
 
-每份报告包含三大核心内容：
+安装后在 Agent 对话中用自然语言发起检查即可：
 
-1. **评级内容** — 综合安全评级（S+ ~ D）、评分（0-100）、来源可信度（T1/T2/T3）
-2. **敏感风险点列举** — 按严重程度排序的详细风险清单，含位置、证据和修复建议
-3. **外部 API 列举** — 所有外部 API 调用的分类、信誉和风险评估
+```
+检查 summarize 这个 skill 的安全性
+```
 
-支持输出格式：Markdown / JSON / SARIF / HTML / PDF
+```
+帮我看看 /Users/me/Developer/my-skill 这个目录下的 skill 是否安全
+```
+
+```
+对 https://github.com/user/awesome-skill 进行安全认证
+```
+
+```
+我想安装一个叫 proactive-agent 的 skill，先帮我做个安全检查
+```
+
+```
+用 CLS-Certify 扫描一下已安装的 chrome skill
+```
+
+```
+这个 skill 看起来有点可疑，帮我做一个完整的六维安全分析并生成 HTML 报告
+```
+
+CLS-Certify 会自动定位 skill、执行六维分析、输出评级报告。如果检测到 D 级触发项（如提示词投毒、反向 Shell、凭证窃取），会立即强制降级并给出警告。
 
 ---
 
-## 内置检测工具
+## 配置
 
-`tools/` 目录下包含 7 个 bash 检测脚本，覆盖硬编码可扫描的检测功能：
+在 SKILL.md 的 frontmatter 中支持以下配置项：
 
-| 工具 | 功能 |
-|-----|------|
-| `threat-scan.sh` | 威胁模式匹配 |
-| `threat-verify.sh` | 威胁意图二次验证 |
-| `secret-scan.sh` | 敏感信息扫描 |
-| `entropy-detect.sh` | Shannon 熵值检测（识别随机密钥） |
-| `dep-audit.sh` | 依赖审计 |
-| `url-audit.sh` | URL/域名审计 |
-| `github-repo-check.sh` | GitHub 仓库信誉检查 |
-| `code-stats.sh` | 代码统计 |
-| `score-calc.sh` | 评分计算 |
+```yaml
+# 扫描模式
+scan_mode: full          # full: 完整六维扫描（默认）
+                         # quick: 仅硬编码快检 + 评分
+                         # static-only: 仅静态分析
+
+# 报告输出格式
+report_formats:
+  - markdown             # Markdown 报告（默认，始终输出）
+  - json                 # JSON 结构化数据
+  - html                 # HTML 可视化报告（需 render.sh）
+  - pdf                  # PDF 报告（需 Chrome，通过 render.sh --pdf）
+  - sarif                # SARIF 格式（GitHub/CodeQL 兼容）
+
+# 报告详细程度
+report_detail: full      # full: 包含所有发现和详细分析
+                         # summary: 仅评级和风险摘要
+                         # minimal: 仅评级和分数
+
+# 最低报告风险级别（低于此级别的发现不输出）
+min_severity: low        # critical / high / medium / low / info
+
+# 检测维度开关（按需关闭不需要的维度）
+dimensions:
+  static_analysis: true       # 静态代码分析
+  dynamic_analysis: true      # 动态行为分析
+  dependency_audit: true      # 依赖审计
+  network_analysis: true      # 网络流量分析
+  privacy_compliance: true    # 隐私合规检查
+  threat_intelligence: true   # 来源信誉与威胁情报
+
+# 来源可信度覆盖（跳过自动检测，手动指定）
+trust_level: auto        # auto: 自动检测（默认）
+                         # T1: 知名大公司/顶级基金会
+                         # T2: 可信组织/GitHub 组织账号
+                         # T3: 个人开发者/社区项目
+
+# 误报过滤
+false_positive_filter:
+  enabled: true          # 启用误报过滤
+  excluded_patterns:     # 排除的文件路径模式
+    - "test/**"
+    - "example/**"
+    - "docs/**"
+```
+
+配置方式：在发起检查时用自然语言指定即可，例如：
+
+```
+用 quick 模式检查 my-skill，只输出 high 以上的风险
+```
+
+```
+对这个 skill 做完整扫描，生成 HTML 报告，跳过依赖审计
+```
 
 ---
 
@@ -110,44 +197,35 @@ IoC 匹配、已知恶意行为模式识别、情报源集成
 
 ```
 cls-certify/
-├── SKILL.md                    # 主技能文档（完整检测工作流）
-├── README.md                   # 本文件
-├── TEAM-STRUCTURE.md           # 六子团队分工架构
-├── V2-UPGRADE-GUIDE.md         # 升级指南
-├── render.sh                   # HTML/PDF 报告渲染脚本
-├── tools/                      # 内置 bash 检测工具
+├── SKILL.md                         # 主技能文档（完整检测工作流）
+├── README.md                        # 本文件
+├── TEAM-STRUCTURE.md                # 六子团队分工架构
+├── render.sh                        # HTML/PDF 报告渲染脚本
+├── tools/                           # 内置 bash 检测工具
+│   ├── threat-scan.sh               #   威胁模式匹配
+│   ├── threat-verify.sh             #   威胁意图二次验证
+│   ├── secret-scan.sh               #   敏感信息扫描
+│   ├── entropy-detect.sh            #   Shannon 熵值检测
+│   ├── dep-audit.sh                 #   依赖审计
+│   ├── url-audit.sh                 #   URL/域名审计
+│   ├── github-repo-check.sh         #   GitHub 仓库信誉检查
+│   ├── code-stats.sh                #   代码统计
+│   └── score-calc.sh                #   评分计算
 ├── templates/
-│   └── report-template.html    # HTML 报告模板
+│   └── report-template.html         # HTML 报告模板
 └── references/
-    ├── threat-patterns.md      # 40+ 威胁模式库
-    ├── sensitive-data-patterns.md # 50+ 敏感数据检测模式
-    ├── structured-report-template.md # 结构化报告 JSON Schema
-    ├── report-data-protocol.md # HTML 渲染数据协议
-    ├── api-classification.md   # 14 类 API 分类标准
-    ├── known-malicious-patterns.md # 已知恶意模式
-    ├── gdpr-checklist.md       # GDPR 合规检查清单
-    └── cve-sources.md          # CVE 数据源配置
+    ├── threat-patterns.md           # 40+ 威胁模式库
+    ├── sensitive-data-patterns.md   # 50+ 敏感数据检测模式
+    ├── api-classification.md        # 14 类 API 分类标准
+    ├── structured-report-template.md # 报告 JSON Schema
+    ├── report-data-protocol.md      # HTML 渲染数据协议
+    ├── known-malicious-patterns.md  # 已知恶意模式
+    ├── gdpr-checklist.md            # GDPR 合规检查清单
+    └── cve-sources.md               # CVE 数据源配置
 ```
-
----
-
-## 参考文档
-
-| 文档 | 描述 |
-|-----|------|
-| [SKILL.md](SKILL.md) | 主技能文档，包含完整检测工作流 |
-| [TEAM-STRUCTURE.md](TEAM-STRUCTURE.md) | 团队分工与协作架构 |
-| [threat-patterns.md](references/threat-patterns.md) | 40+ 威胁检测模式 |
-| [sensitive-data-patterns.md](references/sensitive-data-patterns.md) | 敏感数据检测模式 |
-| [api-classification.md](references/api-classification.md) | API 分类标准 |
-| [structured-report-template.md](references/structured-report-template.md) | 结构化报告模板 |
 
 ---
 
 ## 许可证
 
 MIT License
-
----
-
-*维护: CLS-Certify Core Team*

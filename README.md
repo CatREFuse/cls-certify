@@ -127,7 +127,21 @@ git clone https://github.com/CatREFuse/cls-certify.git ~/.claude/skills/cls-cert
 这个 skill 看起来有点可疑，帮我做一个完整的六维安全分析并生成 HTML 报告
 ```
 
+```
+开启 batch mode，依次检查 summarize、chrome、web-fetcher 三个 skill
+```
+
+```
+把报告保存到桌面，检查 my-skill 的安全性
+```
+
+```
+检查 my-skill，报告保存到 /tmp/reports 目录
+```
+
 CLS-Certify 会自动定位 skill、执行六维分析、输出评级报告。如果检测到 D 级触发项（如提示词投毒、反向 Shell、凭证窃取），会立即强制降级并给出警告。
+
+> **提示**：`batch_mode` 开启后静默运行，不询问输出格式，仅保存 Markdown 报告；`output_dir` 控制报告保存位置，默认为 `~/Downloads`。两者均可通过自然语言临时指定，也可在 SKILL.md frontmatter 中永久配置。
 
 ---
 

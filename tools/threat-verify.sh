@@ -11,10 +11,11 @@
 #   ./tools/threat-verify.sh <candidates.json> [--json]
 #
 # Agent 判定选项:
-#   A) confirmed    — 确认威胁，实际执行危险操作
-#   B) false_positive — 误报，文档描述/列举检测规则
-#   C) low_risk     — 测试/示例代码中的引用，低风险
-#   D) comment      — 注释中的说明文字，误报
+#   A) confirmed         — 确认恶意威胁，实际执行危险操作且无合理用途
+#   B) confirmed_low_risk — 确认存在该调用，但用途合法（如工具脚本中合理使用 child_process）
+#   C) false_positive    — 误报，文档描述/列举检测规则
+#   D) low_risk          — 测试/示例代码中的引用，低风险
+#   E) comment           — 注释中的说明文字，误报
 
 set -euo pipefail
 
@@ -211,10 +212,11 @@ for ((i=0; i<findings_count; i++)); do
 
         echo ""
         echo -e "  ${BOLD}请判断此处的意图:${RESET}"
-        echo -e "  ${GREEN}A)${RESET} confirmed      — 确认威胁，实际执行危险操作"
-        echo -e "  ${YELLOW}B)${RESET} false_positive — 误报，文档描述/列举检测规则"
-        echo -e "  ${CYAN}C)${RESET} low_risk       — 测试/示例代码引用，低风险"
-        echo -e "  ${DIM}D)${RESET} comment        — 注释中的说明文字，误报"
+        echo -e "  ${RED}A)${RESET} confirmed         — 确认恶意威胁，实际执行危险操作且无合理用途"
+        echo -e "  ${YELLOW}B)${RESET} confirmed_low_risk — 确认存在该调用，但用途合法（不触发强制降级）"
+        echo -e "  ${GREEN}C)${RESET} false_positive    — 误报，文档描述/列举检测规则"
+        echo -e "  ${CYAN}D)${RESET} low_risk          — 测试/示例代码引用，低风险"
+        echo -e "  ${DIM}E)${RESET} comment           — 注释中的说明文字，误报"
         echo ""
         echo "────────────────────────────────────────"
         echo ""
@@ -238,7 +240,7 @@ for ((i=0; i<findings_count; i++)); do
             ctx_after_json="[]"
         fi
 
-        item=$(printf '{"id":"%s","file":"%s","line":%s,"severity":"%s","category":"%s","pattern_name":"%s","evidence":"%s","context_before":%s,"context_after":%s,"intent":"pending","options":["confirmed","false_positive","low_risk","comment"]}' \
+        item=$(printf '{"id":"%s","file":"%s","line":%s,"severity":"%s","category":"%s","pattern_name":"%s","evidence":"%s","context_before":%s,"context_after":%s,"intent":"pending","options":["confirmed","confirmed_low_risk","false_positive","low_risk","comment"]}' \
             "$escaped_id" "$escaped_file2" "$f_line" "$f_severity" "$escaped_category" "$escaped_pattern" "$escaped_evidence2" "$ctx_before_json" "$ctx_after_json")
 
         if [[ -n "$JSON_PROMPTS" ]]; then

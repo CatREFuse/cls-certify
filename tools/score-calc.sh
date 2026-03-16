@@ -264,6 +264,47 @@ process_threat_scan() {
         pattern_id=$(json_get_string "$item" "pattern_id")
         item_id=$(json_get_string "$item" "id")
 
+        # ─── 检查 Agent 意图验证结果 ───
+        local intent
+        intent=$(json_get_string "$item" "intent")
+
+        # 如果经过 Agent 验证，按 intent 处理
+        if [[ -n "$intent" && "$intent" != "pending" && "$intent" != "null" ]]; then
+            case "$intent" in
+                false_positive|comment)
+                    # 误报/注释，跳过不计分
+                    continue
+                    ;;
+                low_risk)
+                    # 低风险，轻微扣分，不触发降级
+                    total_deduct=$((total_deduct + 5))
+                    local detail_entry="${item_id}: ${category}(${intent})"
+                    if [[ -n "$detail_items" ]]; then
+                        detail_items="${detail_items};;${detail_entry}"
+                    else
+                        detail_items="${detail_entry}"
+                    fi
+                    finding_count=$((finding_count + 1))
+                    continue
+                    ;;
+                confirmed_low_risk)
+                    # 确认存在但用途合法，常规扣分，不触发强制降级
+                    total_deduct=$((total_deduct + 15))
+                    local detail_entry="${item_id}: ${category}(confirmed_low_risk)"
+                    if [[ -n "$detail_items" ]]; then
+                        detail_items="${detail_items};;${detail_entry}"
+                    else
+                        detail_items="${detail_entry}"
+                    fi
+                    finding_count=$((finding_count + 1))
+                    continue
+                    ;;
+                confirmed)
+                    # 确认恶意，走正常扣分逻辑（不 continue）
+                    ;;
+            esac
+        fi
+
         local detail_entry="${item_id}: ${category}(${severity})"
         if [[ -n "$detail_items" ]]; then
             detail_items="${detail_items};;${detail_entry}"

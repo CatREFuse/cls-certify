@@ -93,10 +93,11 @@ bash {skill_path}/tools/threat-verify.sh /tmp/candidates.json
 ```
 
 Agent 根据上下文对每条候选做出判定：
-- **confirmed** — 确认威胁，实际执行危险操作 → 保留并传入评分
-- **false_positive** — 误报，文档中描述/列举检测规则 → 排除
-- **low_risk** — 测试/示例代码中的引用 → 降低严重性
-- **comment** — 注释中的说明文字 → 排除
+- **confirmed** — 确认恶意威胁，实际执行危险操作且无合理用途 → 保留原始严重性，触发强制降级
+- **confirmed_low_risk** — 确认存在该调用，但用途合法（如工具脚本中合理使用 child_process）→ 常规扣分 -15，不触发强制降级
+- **false_positive** — 误报，文档中描述/列举检测规则 → 排除不计分
+- **low_risk** — 测试/示例代码中的引用 → 轻微扣分 -5
+- **comment** — 注释中的说明文字 → 排除不计分
 
 **判定依据**：
 - 关键词出现在 `.md` 文件的反引号（`` ` ``）中 → 高概率误报

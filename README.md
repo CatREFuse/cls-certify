@@ -36,6 +36,8 @@ cls-certify/
 ├── SKILL.md                              # 主技能文档
 ├── TEAM-STRUCTURE.md                     # 团队分工架构
 ├── README.md                             # 本文件
+├── tools/
+│   └── entropy-detect.sh               # 内置熵值检测工具（bash 实现）
 ├── templates/
 │   └── report-template.html              # HTML 报告统一模板
 └── references/
@@ -173,7 +175,7 @@ cls-certify/
 ## 🎯 核心特性
 
 ### 智能检测
-- **熵值分析**: 识别随机字符串 (API Key、Token)
+- **熵值分析**: 内置 `tools/entropy-detect.sh`，基于 Shannon 信息熵算法识别随机字符串（API Key、Token），阈值 4.5，支持 CLI 和 JSON 输出
 - **上下文感知**: 降低误报率
 - **多层递归**: 动态代码加载深度检查
 - **模式演进**: 持续更新的威胁模式库

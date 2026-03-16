@@ -24,10 +24,13 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 # ─── 知名包列表 ───
-KNOWN_NPM="lodash express react vue angular axios webpack babel eslint prettier typescript jest mocha chai sinon moment dayjs date-fns underscore jquery bootstrap tailwindcss next nuxt gatsby remix svelte solid vite rollup esbuild"
+KNOWN_NPM="lodash express react vue angular axios webpack babel eslint prettier typescript jest mocha chai sinon moment dayjs date-fns underscore jquery bootstrap tailwindcss next nuxt gatsby remix svelte solid vite vitest rollup esbuild playwright puppeteer cypress"
 KNOWN_PIP="requests flask django numpy pandas scipy matplotlib tensorflow pytorch keras scikit-learn beautifulsoup4 sqlalchemy celery redis pillow cryptography paramiko pyyaml boto3 fastapi uvicorn gunicorn black flake8 pytest mypy"
 KNOWN_GENERAL="dotenv commander yargs chalk inquirer ora glob rimraf mkdirp semver uuid nanoid"
 ALL_KNOWN_PACKAGES="${KNOWN_NPM} ${KNOWN_PIP} ${KNOWN_GENERAL}"
+
+# ─── 已知合法的含 "可疑关键词" 的包（白名单，不触发关键词检测） ───
+KEYWORD_WHITELIST="@testing-library vitest jest pytest mocha chai cypress playwright @playwright test-utils testing testcontainers debug"
 
 # ─── 可疑关键词 ───
 SUSPICIOUS_KEYWORDS="test|debug|hack|exploit|malicious|backdoor"
@@ -524,10 +527,22 @@ audit_dep_file() {
         fi
         fi  # end if ! $is_known
 
-        # 3. 可疑关键词检测（对完整包名/路径进行检查）
+        # 3. 可疑关键词检测（对完整包名/路径进行检查，白名单豁免）
         local full_pkg_lower
         full_pkg_lower=$(echo "$pkg" | tr '[:upper:]' '[:lower:]')
-        if check_suspicious_keywords "$full_pkg_lower"; then
+        local keyword_whitelisted=false
+        for wl in $KEYWORD_WHITELIST; do
+            if [[ "$full_pkg_lower" == "$wl" || "$full_pkg_lower" == "$wl/"* || "$full_pkg_lower" == *"/$wl" ]]; then
+                keyword_whitelisted=true
+                break
+            fi
+            # 支持 scoped 包前缀匹配: @testing-library/anything
+            if [[ "$wl" == @* && "$full_pkg_lower" == "$wl/"* ]]; then
+                keyword_whitelisted=true
+                break
+            fi
+        done
+        if ! $keyword_whitelisted && check_suspicious_keywords "$full_pkg_lower"; then
             FINDING_ID=$((FINDING_ID + 1))
             TOTAL_FINDINGS=$((TOTAL_FINDINGS + 1))
             file_findings=$((file_findings + 1))

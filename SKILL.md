@@ -4,6 +4,7 @@ version: 2.0
 description: CocoLoop Safe (CLS) Skill 安全认证。对 Agent Skills 进行六维深度安全分析（静态代码、动态行为、依赖审计、网络流量、隐私合规、威胁情报），输出 S+/S/A/B/C/D 等级评估和 HTML/PDF 可视化报告。使用当用户需要检查 skill 安全性、验证 skill 是否可信、分析 skill 代码安全性、评估 skill 风险等级时。
 metadata:
   author: tanshow
+batch_mode: false
 ---
 
 # CLS-Certify v2.0 - 下一代 Skill 安全认证
@@ -695,28 +696,32 @@ find {skill_path} -type f ! -path '*/.git/*' | sort | xargs cat | shasum -a 256 
 1. **自动保存 Markdown 报告到桌面** — 确保原始数据不丢失
    - 路径: `~/Desktop/CLS-v2-{skill-name}-{评级}-{时间戳}.md`
 
-2. **询问用户输出格式** — 使用 AskUserQuestion 让用户选择：
+2. **检查 `batch_mode` 开关**：
+   - 若 YAML frontmatter 中 `batch_mode: true`：**跳过所有用户询问**，仅输出 Markdown 报告，直接进入步骤 4 展示摘要
+   - 若 `batch_mode: false`（默认）：继续步骤 3 询问用户
+
+3. **询问用户输出格式**（仅 `batch_mode: false` 时执行） — 使用 AskUserQuestion 让用户多选：
 
 ```
 使用 AskUserQuestion 询问：
-  问题: "报告已生成，需要哪种可视化格式？"
+  问题: "报告已生成，需要哪些输出格式？"
+  multiSelect: true
   选项:
+    - "Markdown" — 结构化原始数据（已自动保存到桌面）
     - "HTML 报告" — 生成可在浏览器打开的交互式网页报告
     - "PDF 报告" — 生成可打印/分享的 PDF 文档（需要 Chrome）
-    - "HTML + PDF" — 同时生成两种格式（推荐）
-    - "仅 Markdown" — 不需要可视化报告
 ```
 
-3. **根据用户选择执行渲染**：
+4. **根据用户选择执行渲染**：
 
 | 用户选择 | 执行命令 |
 |---------|---------|
-| HTML 报告 | `bash {skill_path}/render.sh {md_path} {html_path}` |
-| PDF 报告 | `bash {skill_path}/render.sh {md_path} {html_path} --pdf`，然后删除临时 HTML |
-| HTML + PDF | `bash {skill_path}/render.sh {md_path} {html_path} --pdf` |
-| 仅 Markdown | 不执行渲染 |
+| 仅 Markdown / batch_mode | 不执行渲染 |
+| 包含 HTML（不含 PDF） | `bash {skill_path}/render.sh {md_path} {html_path}` |
+| 包含 PDF（不含 HTML） | `bash {skill_path}/render.sh {md_path} {html_path} --pdf`，然后删除临时 HTML |
+| 同时包含 HTML 和 PDF | `bash {skill_path}/render.sh {md_path} {html_path} --pdf` |
 
-4. **打开报告并展示摘要** — 用 `open` 命令打开生成的 HTML 或 PDF
+5. **打开报告并展示摘要** — 用 `open` 命令打开生成的报告（batch_mode 下仅输出文字摘要，不调用 `open`）
 
 **保存路径格式**:
 - Markdown: `~/Desktop/CLS-v2-{skill-name}-{评级}-{时间戳}.md`

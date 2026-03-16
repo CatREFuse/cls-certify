@@ -479,9 +479,11 @@ audit_dep_file() {
 
                 local escaped_pkg
                 escaped_pkg=$(echo "$pkg" | sed 's/"/\\"/g')
+                local dep_context_msg
+                dep_context_msg="来自 ${basename_file} dependencies"
                 local finding_json
-                finding_json=$(printf '{"id":"DEP-%03d","package":"%s","ecosystem":"%s","file":"%s","severity":"high","category":"typosquatting","similar_to":"%s","distance":%d,"description":"包名与知名包 %s 仅差 %d 个字符，疑似 typosquatting","recommendation":"请确认包名是否拼写正确"}' \
-                    "$FINDING_ID" "$escaped_pkg" "$ecosystem" "$basename_file" "$known" "$dist" "$known" "$dist")
+                finding_json=$(printf '{"id":"DEP-%03d","package":"%s","ecosystem":"%s","file":"%s","severity":"high","category":"typosquatting","similar_to":"%s","distance":%d,"description":"包名与知名包 %s 仅差 %d 个字符，疑似 typosquatting","recommendation":"请确认包名是否拼写正确","verified":false,"context":"%s"}' \
+                    "$FINDING_ID" "$escaped_pkg" "$ecosystem" "$basename_file" "$known" "$dist" "$known" "$dist" "$dep_context_msg")
 
                 if [[ -n "$JSON_FINDINGS" ]]; then
                     JSON_FINDINGS="${JSON_FINDINGS},${finding_json}"
@@ -509,9 +511,11 @@ audit_dep_file() {
 
                 local escaped_pkg
                 escaped_pkg=$(echo "$pkg" | sed 's/"/\\"/g')
+                local dep_context_msg
+                dep_context_msg="来自 ${basename_file} dependencies"
                 local finding_json
-                finding_json=$(printf '{"id":"DEP-%03d","package":"%s","ecosystem":"%s","file":"%s","severity":"medium","category":"suffix-variant","similar_to":"%s","distance":0,"description":"包名含后缀，去掉后缀后匹配知名包 %s，可能为混淆变体","recommendation":"请确认是否应使用 %s"}' \
-                    "$FINDING_ID" "$escaped_pkg" "$ecosystem" "$basename_file" "$variant_match" "$variant_match" "$variant_match")
+                finding_json=$(printf '{"id":"DEP-%03d","package":"%s","ecosystem":"%s","file":"%s","severity":"medium","category":"suffix-variant","similar_to":"%s","distance":0,"description":"包名含后缀，去掉后缀后匹配知名包 %s，可能为混淆变体","recommendation":"请确认是否应使用 %s","verified":false,"context":"%s"}' \
+                    "$FINDING_ID" "$escaped_pkg" "$ecosystem" "$basename_file" "$variant_match" "$variant_match" "$variant_match" "$dep_context_msg")
 
                 if [[ -n "$JSON_FINDINGS" ]]; then
                     JSON_FINDINGS="${JSON_FINDINGS},${finding_json}"
@@ -552,9 +556,11 @@ audit_dep_file() {
 
             local escaped_pkg
             escaped_pkg=$(echo "$pkg" | sed 's/"/\\"/g')
+            local dep_context_msg
+            dep_context_msg="来自 ${basename_file} dependencies"
             local finding_json
-            finding_json=$(printf '{"id":"DEP-%03d","package":"%s","ecosystem":"%s","file":"%s","severity":"high","category":"suspicious-keyword","similar_to":"","distance":0,"description":"包名含可疑关键词 %s","recommendation":"请确认此依赖的来源和用途"}' \
-                "$FINDING_ID" "$escaped_pkg" "$ecosystem" "$basename_file" "$matched_keyword")
+            finding_json=$(printf '{"id":"DEP-%03d","package":"%s","ecosystem":"%s","file":"%s","severity":"high","category":"suspicious-keyword","similar_to":"","distance":0,"description":"包名含可疑关键词 %s","recommendation":"请确认此依赖的来源和用途","verified":false,"context":"%s"}' \
+                "$FINDING_ID" "$escaped_pkg" "$ecosystem" "$basename_file" "$matched_keyword" "$dep_context_msg")
 
             if [[ -n "$JSON_FINDINGS" ]]; then
                 JSON_FINDINGS="${JSON_FINDINGS},${finding_json}"

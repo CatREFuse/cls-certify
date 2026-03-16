@@ -64,14 +64,19 @@ SKILL.md 中的代码块需要单独提取和安全检查：
 
 ### 阶段 1.5: 硬编码快检 + 意图验证（两步检测）
 
-威胁检测采用两步流程，避免纯正则匹配的误报问题（如文档中描述检测规则的文字被误判为威胁）。
+**所有硬编码检测工具只产出"候选/疑似点"，是否真正危险依赖 Agent 通过 LLM 能力进行最终判断。**
 
 #### Step 1: 硬编码候选匹配（bash 脚本）
 
-使用 `tools/threat-scan.sh` 对 skill 代码做正则匹配，输出候选命中及上下文：
+运行全部检测工具，每个工具输出候选命中及上下文（`context_before`/`context_after`/`verified: false`）：
 
 ```bash
-bash {skill_path}/tools/threat-scan.sh {target_path} --json --context 3 > /tmp/candidates.json
+bash {skill_path}/tools/threat-scan.sh {target_path} --json --context 3 > /tmp/threat.json
+bash {skill_path}/tools/secret-scan.sh {target_path} --json --context 3 > /tmp/secret.json
+bash {skill_path}/tools/entropy-detect.sh {target_path} --json --context 3 > /tmp/entropy.json
+bash {skill_path}/tools/url-audit.sh {target_path} --json --context 3 > /tmp/url.json
+bash {skill_path}/tools/dep-audit.sh {target_path} --json > /tmp/dep.json
+bash {skill_path}/tools/github-repo-check.sh {owner}/{repo} --json > /tmp/github.json
 ```
 
 **快检维度**：
@@ -86,10 +91,17 @@ bash {skill_path}/tools/threat-scan.sh {target_path} --json --context 3 > /tmp/c
 
 #### Step 2: Agent 意图验证（AI 推理）
 
-使用 `tools/threat-verify.sh` 生成验证 prompt，Agent 逐条审查候选命中的真实意图：
+使用 `tools/threat-verify.sh` 生成验证 prompt，Agent 逐条审查候选命中的真实意图。**所有工具的输出都需要 Agent 验证**：
 
 ```bash
-bash {skill_path}/tools/threat-verify.sh /tmp/candidates.json
+# 对 threat-scan 候选生成验证 prompt
+bash {skill_path}/tools/threat-verify.sh /tmp/threat.json
+
+# Agent 同样需要审查其他工具的候选：
+# - secret-scan: password 在 CSS 选择器中？email 是作者信息？connection string 在文档示例中？
+# - entropy-detect: 高熵字符串是中文提示文本？是 UUID？是正常的 base64 编码？
+# - url-audit: URL 在文档引用中？还是代码中实际调用？
+# - dep-audit: 疑似 typosquatting 的包是否是合法的知名包变体？
 ```
 
 Agent 根据上下文对每条候选做出判定：

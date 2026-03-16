@@ -3,17 +3,21 @@
 # 提取代码中的所有 URL/域名，按 14 类 API 分类标准进行自动分类和风险评估
 #
 # 用法:
-#   ./tools/url-audit.sh <file_or_dir> [--json]
+#   ./tools/url-audit.sh <file_or_dir> [--json] [--context N] [--show-context]
 #
 # 示例:
 #   ./tools/url-audit.sh ./src/
 #   ./tools/url-audit.sh ./src/ --json
+#   ./tools/url-audit.sh ./src/ --json --context 5
+#   ./tools/url-audit.sh ./src/ --show-context
 
 set -euo pipefail
 
 # ─── 默认参数 ───
 OUTPUT_JSON=false
 TARGET=""
+CONTEXT_LINES=3
+SHOW_CONTEXT=false
 
 # ─── 颜色 ───
 RED='\033[0;31m'
@@ -44,6 +48,8 @@ usage() {
     echo ""
     echo "选项:"
     echo "  --json                 输出 JSON 格式"
+    echo "  --context N            上下文行数 (默认 3)"
+    echo "  --show-context         CLI 模式下显示上下文"
     echo "  -h, --help             显示帮助"
     exit 0
 }
@@ -52,6 +58,8 @@ usage() {
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --json) OUTPUT_JSON=true; shift ;;
+        --context) CONTEXT_LINES="$2"; shift 2 ;;
+        --show-context) SHOW_CONTEXT=true; shift ;;
         -h|--help) usage ;;
         -*) echo "未知选项: $1"; usage ;;
         *) TARGET="$1"; shift ;;
@@ -78,8 +86,10 @@ URL_RAW="$TMP_DIR/url_raw.txt"
 URL_DEDUP="$TMP_DIR/url_dedup.txt"
 # 域名警告
 DOMAIN_WARNINGS="$TMP_DIR/domain_warnings.txt"
+# 上下文存储: URL\tFILE:LINE\tBEFORE_BASE64\tAFTER_BASE64
+URL_CONTEXT="$TMP_DIR/url_context.txt"
 
-touch "$URL_RAW" "$URL_DEDUP" "$DOMAIN_WARNINGS"
+touch "$URL_RAW" "$URL_DEDUP" "$DOMAIN_WARNINGS" "$URL_CONTEXT"
 
 # ─── URL 提取正则 ───
 URL_REGEX='https?://[a-zA-Z0-9._~:/?#@!$&()*+,;=%[-]+'
@@ -252,8 +262,15 @@ clean_url() {
 # ─── 扫描单个文件 ───
 scan_file() {
     local file="$1"
-    local line_num=0
 
+    # 先将文件所有行读入数组
+    local file_lines_count=0
+    while IFS= read -r _fline || [[ -n "$_fline" ]]; do
+        file_lines_count=$((file_lines_count + 1))
+        eval "FILE_LINE_${file_lines_count}=\$_fline"
+    done < "$file"
+
+    local line_num=0
     while IFS= read -r line || [[ -n "$line" ]]; do
         line_num=$((line_num + 1))
 
@@ -271,6 +288,51 @@ scan_file() {
             [[ ${#url} -lt 10 ]] && continue
 
             printf '%s\t%s:%d\n' "$url" "$file" "$line_num" >> "$URL_RAW"
+
+            # 收集上下文行
+            local ctx_before=""
+            local ctx_after=""
+            local ctx_start=$((line_num - CONTEXT_LINES))
+            local ctx_end=$((line_num + CONTEXT_LINES))
+            [[ $ctx_start -lt 1 ]] && ctx_start=1
+            [[ $ctx_end -gt $file_lines_count ]] && ctx_end=$file_lines_count
+
+            local i=$ctx_start
+            while [[ $i -lt $line_num ]]; do
+                eval "local _ctx_line=\$FILE_LINE_${i}"
+                if [[ -n "$ctx_before" ]]; then
+                    ctx_before="${ctx_before}"$'\n'"${_ctx_line}"
+                else
+                    ctx_before="${_ctx_line}"
+                fi
+                i=$((i + 1))
+            done
+
+            i=$((line_num + 1))
+            while [[ $i -le $ctx_end ]]; do
+                eval "local _ctx_line=\$FILE_LINE_${i}"
+                if [[ -n "$ctx_after" ]]; then
+                    ctx_after="${ctx_after}"$'\n'"${_ctx_line}"
+                else
+                    ctx_after="${_ctx_line}"
+                fi
+                i=$((i + 1))
+            done
+
+            # base64 编码上下文以安全存储（macOS 兼容）
+            local b64_before b64_after
+            if [[ -n "$ctx_before" ]]; then
+                b64_before=$(printf '%s' "$ctx_before" | base64)
+            else
+                b64_before=""
+            fi
+            if [[ -n "$ctx_after" ]]; then
+                b64_after=$(printf '%s' "$ctx_after" | base64)
+            else
+                b64_after=""
+            fi
+
+            printf '%s\t%s:%d\t%s\t%s\n' "$url" "$file" "$line_num" "$b64_before" "$b64_after" >> "$URL_CONTEXT"
         done <<< "$urls_in_line"
     done < "$file"
 }
@@ -439,11 +501,58 @@ if $OUTPUT_JSON; then
             fi
         done
 
+        # 收集该 URL 的上下文（取第一次出现的上下文）
+        ctx_before_json="[]"
+        ctx_after_json="[]"
+        if [[ -s "$URL_CONTEXT" ]]; then
+            ctx_line_match=$(grep -m1 "^$(echo "$url" | sed 's/[[\.*^$()+?{|]/\\&/g')	" "$URL_CONTEXT" 2>/dev/null || true)
+            if [[ -n "$ctx_line_match" ]]; then
+                b64_bef=$(echo "$ctx_line_match" | cut -f3)
+                b64_aft=$(echo "$ctx_line_match" | cut -f4)
+
+                if [[ -n "$b64_bef" ]]; then
+                    decoded_bef=$(echo "$b64_bef" | base64 -d 2>/dev/null || echo "$b64_bef" | base64 -D 2>/dev/null || true)
+                    if [[ -n "$decoded_bef" ]]; then
+                        ctx_before_json="["
+                        first_ctx=true
+                        while IFS= read -r ctx_l; do
+                            escaped_ctx=$(echo "$ctx_l" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/	/\\t/g')
+                            if $first_ctx; then
+                                ctx_before_json="${ctx_before_json}\"${escaped_ctx}\""
+                                first_ctx=false
+                            else
+                                ctx_before_json="${ctx_before_json},\"${escaped_ctx}\""
+                            fi
+                        done <<< "$decoded_bef"
+                        ctx_before_json="${ctx_before_json}]"
+                    fi
+                fi
+
+                if [[ -n "$b64_aft" ]]; then
+                    decoded_aft=$(echo "$b64_aft" | base64 -d 2>/dev/null || echo "$b64_aft" | base64 -D 2>/dev/null || true)
+                    if [[ -n "$decoded_aft" ]]; then
+                        ctx_after_json="["
+                        first_ctx=true
+                        while IFS= read -r ctx_l; do
+                            escaped_ctx=$(echo "$ctx_l" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/	/\\t/g')
+                            if $first_ctx; then
+                                ctx_after_json="${ctx_after_json}\"${escaped_ctx}\""
+                                first_ctx=false
+                            else
+                                ctx_after_json="${ctx_after_json},\"${escaped_ctx}\""
+                            fi
+                        done <<< "$decoded_aft"
+                        ctx_after_json="${ctx_after_json}]"
+                    fi
+                fi
+            fi
+        fi
+
         # 转义 URL 中的特殊字符
         escaped_url=$(echo "$url" | sed 's/"/\\"/g')
 
-        item=$(printf '{"id":"API-%03d","endpoint":"%s","domain":"%s","method":"unknown","category":"%s","reputation":"%s","risk_level":"%s","calls_count":%d,"locations":[%s],"flags":[%s]}' \
-            "$API_COUNTER" "$escaped_url" "$domain" "$category" "$reputation" "$risk_level" "$count" "$loc_json" "$flags")
+        item=$(printf '{"id":"API-%03d","endpoint":"%s","domain":"%s","method":"unknown","category":"%s","reputation":"%s","risk_level":"%s","calls_count":%d,"locations":[%s],"flags":[%s],"context_before":%s,"context_after":%s,"verified":false}' \
+            "$API_COUNTER" "$escaped_url" "$domain" "$category" "$reputation" "$risk_level" "$count" "$loc_json" "$flags" "$ctx_before_json" "$ctx_after_json")
 
         if [[ -n "$JSON_APIS" ]]; then
             JSON_APIS="${JSON_APIS},${item}"
@@ -456,7 +565,7 @@ if $OUTPUT_JSON; then
     if [[ -s "$DOMAIN_WARNINGS" ]]; then
         while IFS=$'\t' read -r w_domain w_flag w_sev w_desc; do
             escaped_desc=$(echo "$w_desc" | sed 's/"/\\"/g')
-            w_item=$(printf '{"domain":"%s","flag":"%s","severity":"%s","description":"%s"}' \
+            w_item=$(printf '{"domain":"%s","flag":"%s","severity":"%s","description":"%s","verified":false}' \
                 "$w_domain" "$w_flag" "$w_sev" "$escaped_desc")
             if [[ -n "$JSON_WARNINGS" ]]; then
                 JSON_WARNINGS="${JSON_WARNINGS},${w_item}"
@@ -509,6 +618,35 @@ else
             fi
         done
         printf "        %s\n" "$loc_display"
+
+        # 显示上下文（仅在 --show-context 模式）
+        if $SHOW_CONTEXT && [[ -s "$URL_CONTEXT" ]]; then
+            ctx_line_match=$(grep -m1 "^$(echo "$url" | sed 's/[[\.*^$()+?{|]/\\&/g')	" "$URL_CONTEXT" 2>/dev/null || true)
+            if [[ -n "$ctx_line_match" ]]; then
+                b64_bef=$(echo "$ctx_line_match" | cut -f3)
+                b64_aft=$(echo "$ctx_line_match" | cut -f4)
+
+                if [[ -n "$b64_bef" ]]; then
+                    decoded_bef=$(echo "$b64_bef" | base64 -d 2>/dev/null || echo "$b64_bef" | base64 -D 2>/dev/null || true)
+                    if [[ -n "$decoded_bef" ]]; then
+                        printf "        ${CYAN}--- 上文 ---${RESET}\n"
+                        while IFS= read -r ctx_l; do
+                            printf "        ${CYAN}| %s${RESET}\n" "$ctx_l"
+                        done <<< "$decoded_bef"
+                    fi
+                fi
+
+                if [[ -n "$b64_aft" ]]; then
+                    decoded_aft=$(echo "$b64_aft" | base64 -d 2>/dev/null || echo "$b64_aft" | base64 -D 2>/dev/null || true)
+                    if [[ -n "$decoded_aft" ]]; then
+                        printf "        ${CYAN}--- 下文 ---${RESET}\n"
+                        while IFS= read -r ctx_l; do
+                            printf "        ${CYAN}| %s${RESET}\n" "$ctx_l"
+                        done <<< "$decoded_aft"
+                    fi
+                fi
+            fi
+        fi
 
         # 显示域名警告
         if [[ -s "$DOMAIN_WARNINGS" ]]; then

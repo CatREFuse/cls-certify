@@ -249,6 +249,7 @@ scan_md_blocks() {
                 in_block=true
                 block_lang=$(echo "$line" | sed -n 's/^```\([a-zA-Z0-9_+-]*\).*/\1/p')
                 block_lang=$(echo "$block_lang" | tr '[:upper:]' '[:lower:]')
+                [[ -z "$block_lang" ]] && block_lang="text"
                 block_start=$line_num
                 block_content=""
                 block_lines=0

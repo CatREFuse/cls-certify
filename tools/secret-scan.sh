@@ -3,12 +3,13 @@
 # 扫描文件/目录中的硬编码 API Key、密码、私钥、连接串、JWT、PII 等敏感信息
 #
 # 用法:
-#   ./tools/secret-scan.sh <file_or_dir> [--json] [--min-severity critical|high|medium|low]
+#   ./tools/secret-scan.sh <file_or_dir> [--json] [--min-severity critical|high|medium|low] [--context N]
 #
 # 示例:
 #   ./tools/secret-scan.sh ./src/
 #   ./tools/secret-scan.sh config.js --min-severity high
 #   ./tools/secret-scan.sh ./src/ --json --min-severity critical
+#   ./tools/secret-scan.sh ./src/ --context 5
 
 set -euo pipefail
 
@@ -16,6 +17,7 @@ set -euo pipefail
 OUTPUT_JSON=false
 MIN_SEVERITY="low"
 TARGET=""
+CONTEXT_LINES=3
 
 # ─── 颜色 ───
 RED='\033[0;31m'
@@ -23,6 +25,7 @@ YELLOW='\033[0;33m'
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
+DIM='\033[2m'
 RESET='\033[0m'
 
 # ─── 排除的文件模式 ───
@@ -59,6 +62,7 @@ usage() {
     echo "选项:"
     echo "  --json                    输出 JSON 格式"
     echo "  --min-severity <level>    最低严重性 (critical|high|medium|low, 默认: low)"
+    echo "  --context <N>             上下文行数 (默认: 3)"
     echo "  -h, --help                显示帮助"
     exit 0
 }
@@ -68,6 +72,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --json) OUTPUT_JSON=true; shift ;;
         --min-severity) MIN_SEVERITY="$2"; shift 2 ;;
+        --context) CONTEXT_LINES="$2"; shift 2 ;;
         -h|--help) usage ;;
         -*) echo "未知选项: $1"; usage ;;
         *) TARGET="$1"; shift ;;
@@ -214,10 +219,19 @@ scan_file() {
         return
     fi
 
-    local line_num=0
+    # 将文件读入数组（兼容 macOS bash 3.2）
+    local file_lines=()
+    local total_lines=0
+    while IFS= read -r _line || [[ -n "$_line" ]]; do
+        file_lines+=("$_line")
+        total_lines=$((total_lines + 1))
+    done < "$file"
 
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        line_num=$((line_num + 1))
+    local idx=0
+    while [[ $idx -lt $total_lines ]]; do
+        local line="${file_lines[$idx]}"
+        local line_num=$((idx + 1))
+        idx=$((idx + 1))
 
         # 跳过空行
         [[ -z "$line" ]] && continue
@@ -246,14 +260,64 @@ scan_file() {
             local display_str
             display_str=$(truncate_str "$matched")
 
+            # ─── 提取上下文行 ───
+            local ctx_before=()
+            local ctx_after=()
+            local cb_start=$((idx - 1 - CONTEXT_LINES))
+            [[ $cb_start -lt 0 ]] && cb_start=0
+            local cb_end=$((idx - 2))  # idx 已经 +1，所以 idx-2 是命中行的前一行
+            local ci=$cb_start
+            while [[ $ci -le $cb_end && $ci -ge 0 ]]; do
+                ctx_before+=("${file_lines[$ci]}")
+                ci=$((ci + 1))
+            done
+
+            local ca_start=$idx  # idx 已经 +1，当前就是下一行
+            local ca_end=$((idx - 1 + CONTEXT_LINES))
+            [[ $ca_end -ge $total_lines ]] && ca_end=$((total_lines - 1))
+            ci=$ca_start
+            while [[ $ci -le $ca_end ]]; do
+                ctx_after+=("${file_lines[$ci]}")
+                ci=$((ci + 1))
+            done
+
             if $OUTPUT_JSON; then
                 local escaped_evidence escaped_file escaped_desc
                 escaped_evidence=$(json_escape "$display_str")
                 escaped_file=$(json_escape "$file")
                 escaped_desc=$(json_escape "$desc")
+
+                # 构建 context_before JSON 数组
+                local json_ctx_before="["
+                local first=true
+                local cb_item
+                for cb_item in "${ctx_before[@]+"${ctx_before[@]}"}"; do
+                    if $first; then
+                        first=false
+                    else
+                        json_ctx_before="${json_ctx_before},"
+                    fi
+                    json_ctx_before="${json_ctx_before}\"$(json_escape "$cb_item")\""
+                done
+                json_ctx_before="${json_ctx_before}]"
+
+                # 构建 context_after JSON 数组
+                local json_ctx_after="["
+                first=true
+                local ca_item
+                for ca_item in "${ctx_after[@]+"${ctx_after[@]}"}"; do
+                    if $first; then
+                        first=false
+                    else
+                        json_ctx_after="${json_ctx_after},"
+                    fi
+                    json_ctx_after="${json_ctx_after}\"$(json_escape "$ca_item")\""
+                done
+                json_ctx_after="${json_ctx_after}]"
+
                 local item
-                item=$(printf '{"id":"SECRET-%03d","file":"%s","line":%d,"severity":"%s","pattern_name":"%s","description":"%s","evidence":"%s","recommendation":"%s"}' \
-                    "$FINDING_ID" "$escaped_file" "$line_num" "$sev" "$pname" "$escaped_desc" "$escaped_evidence" "使用环境变量存储密钥")
+                item=$(printf '{"id":"SECRET-%03d","file":"%s","line":%d,"severity":"%s","pattern_name":"%s","description":"%s","evidence":"%s","context_before":%s,"context_after":%s,"verified":false,"recommendation":"%s"}' \
+                    "$FINDING_ID" "$escaped_file" "$line_num" "$sev" "$pname" "$escaped_desc" "$escaped_evidence" "$json_ctx_before" "$json_ctx_after" "使用环境变量存储密钥")
                 if [[ -n "$JSON_ITEMS" ]]; then
                     JSON_ITEMS="${JSON_ITEMS},${item}"
                 else
@@ -269,13 +333,34 @@ scan_file() {
                 esac
                 printf "  ${color}[%s]${RESET} ${BOLD}%s${RESET}:%d  pattern=${CYAN}%s${RESET}\n" \
                     "$sev" "$file" "$line_num" "$pname"
-                printf "         %s\n\n" "$display_str"
+
+                # 显示上下文：命中行前
+                local ctx_line_num
+                ctx_line_num=$((line_num - ${#ctx_before[@]}))
+                local cb_display
+                for cb_display in "${ctx_before[@]+"${ctx_before[@]}"}"; do
+                    printf "    ${DIM}%4d │ %s${RESET}\n" "$ctx_line_num" "$cb_display"
+                    ctx_line_num=$((ctx_line_num + 1))
+                done
+
+                # 显示命中行（红色高亮）
+                printf "    ${RED}${BOLD}%4d │ %s${RESET}\n" "$line_num" "$line"
+
+                # 显示上下文：命中行后
+                ctx_line_num=$((line_num + 1))
+                local ca_display
+                for ca_display in "${ctx_after[@]+"${ctx_after[@]}"}"; do
+                    printf "    ${DIM}%4d │ %s${RESET}\n" "$ctx_line_num" "$ca_display"
+                    ctx_line_num=$((ctx_line_num + 1))
+                done
+
+                printf "         evidence: %s\n\n" "$display_str"
             fi
 
             # 每行每个模式只取第一个匹配，避免重复
             break
         done
-    done < "$file"
+    done
 }
 
 # ─── 构建 find 排除参数 ───
@@ -292,6 +377,7 @@ if ! $OUTPUT_JSON; then
     echo ""
     echo -e "${BOLD}CLS-Certify 敏感信息扫描${RESET}"
     echo -e "最低严重性: ${CYAN}${MIN_SEVERITY}${RESET}"
+    echo -e "上下文行数: ${CYAN}${CONTEXT_LINES}${RESET}"
     echo -e "目标: ${CYAN}${TARGET}${RESET}"
     echo "────────────────────────────────────────"
 fi
@@ -308,8 +394,8 @@ fi
 # ─── 输出结果 ───
 if $OUTPUT_JSON; then
     local_target=$(json_escape "$TARGET")
-    printf '{"tool":"cls-secret-scan","target":"%s","min_severity":"%s","total_findings":%d,"findings":[%s]}\n' \
-        "$local_target" "$MIN_SEVERITY" "$TOTAL_FINDINGS" "$JSON_ITEMS"
+    printf '{"tool":"cls-secret-scan","target":"%s","min_severity":"%s","context_lines":%d,"total_findings":%d,"findings":[%s]}\n' \
+        "$local_target" "$MIN_SEVERITY" "$CONTEXT_LINES" "$TOTAL_FINDINGS" "$JSON_ITEMS"
 else
     echo "────────────────────────────────────────"
     if [[ $TOTAL_FINDINGS -eq 0 ]]; then

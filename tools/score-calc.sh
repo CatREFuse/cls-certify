@@ -185,6 +185,23 @@ process_secret_scan() {
         severity=$(json_get_string "$item" "severity")
         pattern_name=$(json_get_string "$item" "pattern_name")
 
+        # ─── 检查 Agent 意图验证结果 ───
+        local intent
+        intent=$(json_get_string "$item" "intent")
+        if [[ -n "$intent" && "$intent" != "pending" && "$intent" != "null" ]]; then
+            case "$intent" in
+                false_positive|comment)
+                    continue ;;
+                low_risk)
+                    total_deduct=$((total_deduct + 2))
+                    continue ;;
+                confirmed_low_risk)
+                    total_deduct=$((total_deduct + 10))
+                    continue ;;
+                confirmed) ;; # 走正常扣分
+            esac
+        fi
+
         # 检查是否已见过同类型
         if echo "$seen_patterns" | grep -qF "|${pattern_name}|"; then
             continue
@@ -237,7 +254,7 @@ process_secret_scan() {
         add_deduction "secret-scan" "0" "未发现敏感信息" ""
     fi
 
-    # 强制 D 级：critical 级别的私钥泄露
+    # 强制 D 级：仅在 Agent 未标记为误报时触发
     if $has_private_key; then
         FORCE_D=true
         add_forced_downgrade "secret-scan: 发现 critical 级别的私钥泄露"
@@ -398,6 +415,18 @@ process_entropy_detect() {
         severity=$(json_get_string "$item" "severity")
         item_id=$(json_get_string "$item" "id")
 
+        # ─── 检查 Agent 意图验证结果 ───
+        local intent
+        intent=$(json_get_string "$item" "intent")
+        if [[ -n "$intent" && "$intent" != "pending" && "$intent" != "null" ]]; then
+            case "$intent" in
+                false_positive|comment) continue ;;
+                low_risk) total_deduct=$((total_deduct + 2)); finding_count=$((finding_count + 1)); continue ;;
+                confirmed_low_risk) total_deduct=$((total_deduct + 5)); finding_count=$((finding_count + 1)); continue ;;
+                confirmed) ;; # 走正常扣分
+            esac
+        fi
+
         local detail_entry="${item_id}: ${severity}"
         if [[ -n "$detail_items" ]]; then
             detail_items="${detail_items};;${detail_entry}"
@@ -446,6 +475,16 @@ process_url_audit() {
         domain=$(json_get_string "$item" "domain")
         severity=$(json_get_string "$item" "severity")
 
+        # ─── 检查 Agent 意图验证结果 ───
+        local intent
+        intent=$(json_get_string "$item" "intent")
+        if [[ -n "$intent" && "$intent" != "pending" && "$intent" != "null" ]]; then
+            case "$intent" in
+                false_positive|comment|low_risk|confirmed_low_risk) continue ;;
+                confirmed) ;; # 走正常扣分
+            esac
+        fi
+
         local detail_entry="域名 ${domain}: ${flag}"
         if [[ -n "$detail_items" ]]; then
             detail_items="${detail_items};;${detail_entry}"
@@ -474,6 +513,16 @@ process_url_audit() {
         local api_category endpoint
         api_category=$(json_get_string "$item" "category")
         endpoint=$(json_get_string "$item" "endpoint")
+
+        # ─── 检查 Agent 意图验证结果 ───
+        local intent
+        intent=$(json_get_string "$item" "intent")
+        if [[ -n "$intent" && "$intent" != "pending" && "$intent" != "null" ]]; then
+            case "$intent" in
+                false_positive|comment|low_risk|confirmed_low_risk) continue ;;
+                confirmed) ;; # 走正常扣分
+            esac
+        fi
 
         case "$api_category" in
             suspicious)
@@ -532,6 +581,16 @@ process_dep_audit() {
         distance=$(json_get_number "$item" "distance")
         item_id=$(json_get_string "$item" "id")
         pkg=$(json_get_string "$item" "package")
+
+        # ─── 检查 Agent 意图验证结果 ───
+        local intent
+        intent=$(json_get_string "$item" "intent")
+        if [[ -n "$intent" && "$intent" != "pending" && "$intent" != "null" ]]; then
+            case "$intent" in
+                false_positive|comment|low_risk|confirmed_low_risk) continue ;;
+                confirmed) ;; # 走正常扣分
+            esac
+        fi
 
         local detail_entry="${item_id}: ${pkg}(${category})"
         if [[ -n "$detail_items" ]]; then

@@ -227,7 +227,7 @@ scan_file() {
 build_find_excludes() {
     local excludes=()
     for pattern in "${EXCLUDE_PATTERNS[@]}"; do
-        excludes+=(-not -path "*/$pattern")
+        excludes+=("-not" "-path" "'*/$pattern'")
     done
     echo "${excludes[@]}"
 }

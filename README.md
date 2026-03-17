@@ -1,6 +1,6 @@
 # CLS-Certify - Agent Skill 安全认证系统
 
-> 面向所有支持 Skill 的 Agent 平台，提供六维深度安全分析和 S+ ~ D 等级评估
+> **v2.1.0** (build 20260317.0002) — 面向所有支持 Skill 的 Agent 平台，提供六维深度安全分析和 S+ ~ D 等级评估
 
 适用平台：Claude Code / OpenAI Agents / Cursor / Windsurf 等
 

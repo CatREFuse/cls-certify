@@ -1,6 +1,7 @@
 ---
 name: cls-certify
-version: 2.0
+version: 2.1.0
+build: 20260317.0002
 description: CocoLoop Safe (CLS) Skill 安全认证。对 Agent Skills 进行六维深度安全分析（静态代码、动态行为、依赖审计、网络流量、隐私合规、威胁情报），输出 S+/S/A/B/C/D 等级评估和 HTML/PDF 可视化报告。使用当用户需要检查 skill 安全性、验证 skill 是否可信、分析 skill 代码安全性、评估 skill 风险等级时。
 metadata:
   author: tanshow
@@ -9,7 +10,7 @@ output_dir: ~/Downloads
 scan_mode: auto
 ---
 
-# CLS-Certify v2.0 - 下一代 Skill 安全认证
+# CLS-Certify v2.1.0 - 下一代 Skill 安全认证
 
 对 Agent Skills 进行企业级多维度安全检测和认证，提供 S+/S/A/B/C/D 安全等级评估，输出包含敏感风险点和外部 API 清单的结构化报告。
 
@@ -22,6 +23,26 @@ scan_mode: auto
 - **隐私合规**: GDPR、CCPA 合规性检查
 
 ## 工作流程
+
+### 阶段 0: 版本检查
+
+运行检测前，先检查 CLS-Certify 是否有新版本：
+
+```bash
+bash {skill_path}/tools/check-update.sh --json > /tmp/cls-update.json
+```
+
+读取 `/tmp/cls-update.json`，若 `update_available` 为 `true`，使用 AskUserQuestion 询问用户：
+
+```
+使用 AskUserQuestion 询问：
+  问题: "CLS-Certify 有新版本可用（v{remote_version} build {remote_build}），是否先更新？"
+  选项:
+    - "更新后继续" — 执行 git pull 更新后继续检测
+    - "跳过，使用当前版本" — 继续使用当前版本
+```
+
+若用户选择更新，执行 `update_command` 中的命令，然后继续检测。若检查失败或无新版本，静默跳过。
 
 ### 阶段 1: 前置检查与来源分级
 
@@ -881,10 +902,13 @@ find {skill_path} -type f ! -path '*/.git/*' | sort | xargs cat | shasum -a 256 
   问题: "报告已生成，需要哪些输出格式？"
   multiSelect: true
   选项:
-    - "Markdown" — 结构化原始数据（已自动保存到桌面）
-    - "HTML 报告" — 生成可在浏览器打开的交互式网页报告
-    - "PDF 报告" — 生成可打印/分享的 PDF 文档（需要 Chrome）
+    - "Markdown 文件" — 结构化文本报告（已自动保存）
+    - "HTML 文件" — 可在浏览器打开的交互式网页报告
+    - "PDF 文件" — 可打印/分享的 PDF 文档（需要 Chrome）
+    - "JSON 结构化文件" — 机器可读的结构化数据，适合 CI/CD 集成
 ```
+
+用户也可选 "Other" 键入自定义格式（AskUserQuestion 自带）。
 
 4. **根据用户选择执行渲染**：
 
@@ -894,6 +918,7 @@ find {skill_path} -type f ! -path '*/.git/*' | sort | xargs cat | shasum -a 256 
 | 包含 HTML（不含 PDF） | `bash {skill_path}/render.sh {md_path} {html_path}` |
 | 包含 PDF（不含 HTML） | `bash {skill_path}/render.sh {md_path} {html_path} --pdf`，然后删除临时 HTML |
 | 同时包含 HTML 和 PDF | `bash {skill_path}/render.sh {md_path} {html_path} --pdf` |
+| 包含 JSON | 将 score-calc.sh 的 JSON 输出 + 分类信息 + findings 汇总为完整 JSON 报告，保存到 `{output_dir}` |
 
 5. **打开报告并展示摘要** — 用 `open` 命令打开生成的报告（batch_mode 下仅输出文字摘要，不调用 `open`）
 
@@ -901,6 +926,7 @@ find {skill_path} -type f ! -path '*/.git/*' | sort | xargs cat | shasum -a 256 
 - Markdown: `{output_dir}/CLS-v2-{skill-name}-{评级}-{时间戳}.md`
 - HTML: `{output_dir}/CLS-v2-{skill-name}-{评级}-{时间戳}.html`
 - PDF: `{output_dir}/CLS-v2-{skill-name}-{评级}-{时间戳}.pdf`
+- JSON: `{output_dir}/CLS-v2-{skill-name}-{评级}-{时间戳}.json`
 
 #### 4.5 渲染脚本
 

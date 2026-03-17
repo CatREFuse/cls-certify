@@ -6,6 +6,7 @@ metadata:
   author: tanshow
 batch_mode: false
 output_dir: ~/Downloads
+scan_mode: auto
 ---
 
 # CLS-Certify v2.0 - 下一代 Skill 安全认证
@@ -64,22 +65,110 @@ SKILL.md 中的代码块需要单独提取和安全检查：
 
 ---
 
-### 阶段 1.5: 硬编码快检 + 意图验证（两步检测）
+### 阶段 1.5: Skill 分类与策略选择
+
+基于 1.2 加载的文件结构和代码统计，自动判定 skill 类型并选择最优检查策略，避免对所有 skill 执行相同强度的检查。
+
+**Step 1: 运行代码统计**
+
+```bash
+bash {skill_path}/tools/code-stats.sh {target_path} --json > /tmp/code-stats.json
+```
+
+**Step 2: 运行分类判定**
+
+```bash
+bash {skill_path}/tools/skill-classify.sh {target_path} --stats /tmp/code-stats.json --json > /tmp/classify.json
+```
+
+**分类体系 (Classification Tiers)**:
+
+按判定优先级（首次命中即确定）:
+
+| Tier | 名称 | 判定条件 | 检查策略 |
+|:----:|------|---------|---------|
+| **T-MD** | 纯 Markdown | 所有文件为 `.md`，无 medium/high 风险代码块 | MD 语义分析为主，跳过 secret/entropy/dep 工具 |
+| **T-HEAVY** | 大型代码 | 可执行代码行 >200 或代码文件 >10 或可执行文件体积 >100KB | Targeted 模式：模式匹配后聚焦命中点上下文 |
+| **T-REF** | 引用代码 | 存在 `references/` 代码文件，或 MD 含 medium/high 代码块 | 全量检查 + 引用溯源 |
+| **T-LITE** | 轻量代码 | 以上均不满足 | 全量检查（代码量小，开销低） |
+
+**策略模式说明**:
+
+| 模式 | 含义 |
+|------|------|
+| **FULL** | 标准完整执行 |
+| **SKIP** | 完全跳过，报告中标注 "N/A (不适用)" |
+| **MD-ONLY** | 工具仅以 SKILL.md 为 target（非整个目录） |
+| **TARGETED** | 先模式匹配全目录，Agent 仅审查命中点上下文（不全文阅读代码） |
+| **LITE** | 仅检查核心项（提示词投毒/权限升级/MCP 滥用），跳过 GDPR 等 |
+| **FULL+REF** | 额外追溯 references/ 中引用代码的 URL 和来源可信度 |
+
+**各分类检查策略对照表**:
+
+| 检查项 | T-MD | T-LITE | T-REF | T-HEAVY |
+|--------|:----:|:------:|:-----:|:-------:|
+| MD 全文语义分析 | **FULL** | FULL | FULL | FULL |
+| threat-scan.sh | MD-ONLY | FULL | FULL | FULL |
+| secret-scan.sh | SKIP | FULL | FULL | FULL |
+| entropy-detect.sh | SKIP | FULL | FULL | FULL |
+| url-audit.sh | MD-ONLY | FULL | FULL | FULL |
+| dep-audit.sh | SKIP | FULL | FULL | FULL |
+| github-repo-check.sh | FULL | FULL | FULL | FULL |
+| 维度 1: 静态分析 | MD-ONLY | FULL | FULL | **TARGETED** |
+| 维度 2: 动态行为 | SKIP | FULL | FULL | TARGETED |
+| 维度 3: 依赖审计 | SKIP | FULL | FULL | FULL |
+| 维度 4: 网络分析 | MD-ONLY | FULL | **FULL+REF** | FULL |
+| 维度 5: 隐私合规 | LITE | FULL | FULL | FULL |
+| 维度 6: 威胁情报 | FULL | FULL | FULL | FULL |
+
+**scan_mode 配置覆盖**:
+
+若用户通过 frontmatter 或自然语言指定了 `scan_mode`，以用户配置为准：
+- `scan_mode: auto`（默认）— 按分类结果自动选择策略
+- `scan_mode: full` / "完整扫描" / "深度检查" — 忽略分类结果，执行全量检查
+- `scan_mode: quick` / "快速检查" / "简单看看" — 所有 tier 均按 T-MD 策略执行（最精简）
+
+**Step 3: 应用策略**
+
+根据分类结果，调整阶段 1.6（硬编码快检）的工具调用目标和阶段 2（六维检测）的执行范围。将 `/tmp/classify.json` 中的 `strategy` 和 `scan_targets` 传递给后续阶段。
+
+---
+
+### 阶段 1.6: 硬编码快检 + 意图验证（两步检测）
 
 **所有硬编码检测工具只产出"候选/疑似点"，是否真正危险依赖 Agent 通过 LLM 能力进行最终判断。**
 
-#### Step 1: 硬编码候选匹配（bash 脚本）
+#### Step 1: 硬编码候选匹配（按策略执行）
 
-运行全部检测工具，每个工具输出候选命中及上下文（`context_before`/`context_after`/`verified: false`）：
+根据阶段 1.5 的分类结果（`/tmp/classify.json`），有条件地运行检测工具。每个工具输出候选命中及上下文（`context_before`/`context_after`/`verified: false`）：
 
 ```bash
-bash {skill_path}/tools/threat-scan.sh {target_path} --json --context 3 > /tmp/threat.json
-bash {skill_path}/tools/secret-scan.sh {target_path} --json --context 3 > /tmp/secret.json
+# 读取分类策略中的 scan_targets
+# threat_target / secret_target / url_target 根据 tier 可能是 SKILL.md 路径或整个目录
+
+# threat-scan: T-MD 时 target 为 SKILL.md，其他为整个目录
+bash {skill_path}/tools/threat-scan.sh {threat_target} --json --context 3 > /tmp/threat.json
+
+# secret-scan: T-MD 时跳过（strategy.secret_scan == "skip"）
+# 非跳过时执行:
+bash {skill_path}/tools/secret-scan.sh {secret_target} --json --context 3 > /tmp/secret.json
+
+# entropy-detect: T-MD 时跳过（strategy.entropy_detect == "skip"）
+# 非跳过时执行:
 bash {skill_path}/tools/entropy-detect.sh {target_path} --json --context 3 > /tmp/entropy.json
-bash {skill_path}/tools/url-audit.sh {target_path} --json --context 3 > /tmp/url.json
+
+# url-audit: T-MD 时 target 为 SKILL.md
+bash {skill_path}/tools/url-audit.sh {url_target} --json --context 3 > /tmp/url.json
+
+# dep-audit: T-MD 时跳过（strategy.dep_audit == "skip"）
+# 非跳过时执行:
 bash {skill_path}/tools/dep-audit.sh {target_path} --json > /tmp/dep.json
+
+# github-repo-check: 始终执行（如有 GitHub 来源）
 bash {skill_path}/tools/github-repo-check.sh {owner}/{repo} --json > /tmp/github.json
 ```
+
+> **注意**: 当策略值为 `"skip"` 时，直接跳过该工具调用。被跳过的工具不会产出 JSON 文件，`score-calc.sh` 会自然忽略不存在的输入。
 
 **快检维度**：
 1. **危险函数匹配** — eval/exec/system/child_process 等
@@ -125,7 +214,13 @@ Agent 根据上下文对每条候选做出判定：
 
 ---
 
-### 阶段 2: 六维深度检测
+### 阶段 2: 六维深度检测（策略感知）
+
+> **策略感知**: 以下六维检测的执行范围受阶段 1.5 分类结果控制。
+> - **T-MD**: 仅执行维度 1（MD 语义分析部分: 2.1.6 提示词投毒、2.1.7 权限升级、2.1.11 MCP 滥用）、维度 5（LITE 模式）、维度 6。跳过维度 2、3。
+> - **T-LITE**: 全部维度正常执行。
+> - **T-REF**: 全部维度正常执行。维度 4 额外执行引用溯源 — 追溯 `references/` 中引用代码的 URL 和外部调用来源。
+> - **T-HEAVY**: 全部维度执行，但维度 1 和维度 2 采用 **Targeted 模式** — Agent 不逐文件阅读全部代码，仅审查 `threat-scan.sh` 和 `secret-scan.sh` 命中点的上下文（`context_before`/`context_after`），并分析功能-行为一致性。
 
 #### 维度 1: 静态代码分析 (Static Analysis)
 
@@ -372,6 +467,8 @@ Agent 根据上下文对每条候选做出判定：
 
 #### 维度 2: 动态行为分析 (Dynamic Analysis) — 模拟运行
 
+> **策略适配**: T-MD 时跳过此维度（纯 Markdown skill 无可执行代码）。T-HEAVY 时采用 Targeted 模式 — 子 Agent 仅分析 threat-scan 命中文件，而非全部代码。
+
 > **当前实现**：通过创建子 Agent 进行模拟运行分析。子 Agent 读取 skill 代码后，推理其运行时行为并输出分析报告，**不实际执行任何操作**。
 >
 > **未来演进**：当周边 infra 完善后，此处将替换为创建沙箱内 Agent 的 toolcall，在真正的隔离环境中执行 skill 代码并捕获运行时行为。
@@ -451,6 +548,8 @@ Agent 根据上下文对每条候选做出判定：
 ```
 
 #### 维度 4: 网络流量分析 (Network Analysis)
+
+> **策略适配**: T-MD 时仅扫描 SKILL.md 中的 URL。T-REF 时额外执行**引用溯源** — 追溯 `references/` 中引用代码的 URL 来源，验证引用代码是否来自可信源，检查是否存在未声明的外部网络调用。
 
 **2.4.1 外部 API 识别与分类**
 

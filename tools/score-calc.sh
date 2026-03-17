@@ -678,6 +678,29 @@ process_github_repo_check() {
 }
 
 # ─── 路由到对应处理器 ───
+# ─── 处理 skill-classify JSON ───
+# 分类信息不影响评分，仅记录 tier 和跳过维度供报告使用
+SKILL_TIER=""
+SKILL_TIER_NAME=""
+SKILL_SCAN_MODE=""
+SKIPPED_DIMS=""
+
+process_skill_classify() {
+    local json="$1"
+    SKILL_TIER=$(json_get_string "$json" "tier")
+    SKILL_TIER_NAME=$(json_get_string "$json" "tier_name")
+    SKILL_SCAN_MODE=$(json_get_string "$json" "scan_mode")
+
+    # 提取 skipped_dimensions 数组
+    if $HAS_JQ; then
+        SKIPPED_DIMS=$(echo "$json" | jq -r '.skipped_dimensions | join(",")')
+    else
+        SKIPPED_DIMS=$(echo "$json" | grep -oP '"skipped_dimensions":\[([^\]]*)\]' | sed 's/"skipped_dimensions":\[//; s/\]//; s/"//g')
+    fi
+
+    SKIPPED_DIMS="${SKIPPED_DIMS:-}"
+}
+
 process_json() {
     local json="$1"
     local tool
@@ -690,6 +713,7 @@ process_json() {
         cls-url-audit)          process_url_audit "$json" ;;
         cls-dep-audit)          process_dep_audit "$json" ;;
         cls-github-repo-check)  process_github_repo_check "$json" ;;
+        cls-skill-classify)     process_skill_classify "$json" ;;
         *)
             # 未知工具，跳过
             return 0
@@ -951,8 +975,31 @@ if $OUTPUT_JSON; then
     trust_out="${TRUST_LEVEL:-unknown}"
     output_eval=$(echo "$EVALUATION" | sed 's/"/\\"/g')
 
-    printf '{"tool":"cls-score-calc","grade":"%s","score":%d,"max_score":100,"evaluation":"%s","stamp_color":"%s","trust_level":"%s","deductions":[%s],"forced_downgrades":[%s],"grade_caps":[%s],"input_files":[%s]}\n' \
+    # 构建 skipped_dimensions JSON 数组
+    SKIPPED_DIMS_JSON=""
+    if [[ -n "$SKIPPED_DIMS" ]]; then
+        old_ifs="$IFS"
+        IFS=','
+        for sd in $SKIPPED_DIMS; do
+            [[ -z "$sd" ]] && continue
+            sd=$(echo "$sd" | tr -d ' ')
+            if [[ -n "$SKIPPED_DIMS_JSON" ]]; then
+                SKIPPED_DIMS_JSON="${SKIPPED_DIMS_JSON},\"${sd}\""
+            else
+                SKIPPED_DIMS_JSON="\"${sd}\""
+            fi
+        done
+        IFS="$old_ifs"
+    fi
+
+    # skill_tier 可能为空（向后兼容无分类的情况）
+    tier_out="${SKILL_TIER:-none}"
+    tier_name_out="${SKILL_TIER_NAME:-未分类}"
+    scan_mode_out="${SKILL_SCAN_MODE:-auto}"
+
+    printf '{"tool":"cls-score-calc","grade":"%s","score":%d,"max_score":100,"evaluation":"%s","stamp_color":"%s","trust_level":"%s","skill_tier":"%s","skill_tier_name":"%s","scan_mode":"%s","skipped_dimensions":[%s],"deductions":[%s],"forced_downgrades":[%s],"grade_caps":[%s],"input_files":[%s]}\n' \
         "$GRADE" "$FINAL_SCORE" "$output_eval" "$STAMP_COLOR" "$trust_out" \
+        "$tier_out" "$tier_name_out" "$scan_mode_out" "$SKIPPED_DIMS_JSON" \
         "$DEDUCTIONS_JSON" "$DOWNGRADES_JSON" "$CAPS_JSON" "$FILES_JSON"
 else
     # CLI 输出
@@ -971,6 +1018,15 @@ else
     echo -e "  评级: ${GRADE_COLOR}${BOLD}${GRADE_DISPLAY}${RESET}"
     echo -e "  评分: ${BOLD}${FINAL_SCORE}${RESET} / 100"
     echo -e "  评价: ${EVALUATION}"
+
+    if [[ -n "$SKILL_TIER" ]]; then
+        echo ""
+        echo -e "  分类: ${CYAN}${SKILL_TIER}${RESET} — ${SKILL_TIER_NAME}"
+        echo -e "  模式: ${SKILL_SCAN_MODE}"
+        if [[ -n "$SKIPPED_DIMS" ]]; then
+            echo -e "  跳过: ${YELLOW}${SKIPPED_DIMS}${RESET}"
+        fi
+    fi
     echo ""
     echo "════════════════════════════════════════"
     echo "扣分明细:"

@@ -68,6 +68,35 @@ DANGEROUS_KEYWORDS=(
 # ─── 可执行语言列表 ───
 EXEC_LANGS="bash|shell|sh|zsh|python|javascript|typescript|node|ruby|go|rust|java|php|perl"
 
+# ─── 可执行语言判定（用于分类统计） ───
+is_executable_language() {
+    case "$1" in
+        JavaScript|TypeScript|Python|Shell|Ruby|Go|Rust|Java|PHP) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# ─── 跨平台获取文件字节数 ───
+get_file_size() {
+    if [[ "$(uname)" == "Darwin" ]]; then
+        stat -f%z "$1" 2>/dev/null || echo 0
+    else
+        stat -c%s "$1" 2>/dev/null || echo 0
+    fi
+}
+
+# ─── 格式化体积 ───
+format_size() {
+    local bytes="$1"
+    if [[ $bytes -ge 1048576 ]]; then
+        awk -v b="$bytes" 'BEGIN { printf "%.1f MB", b/1048576 }'
+    elif [[ $bytes -ge 1024 ]]; then
+        awk -v b="$bytes" 'BEGIN { printf "%.1f KB", b/1024 }'
+    else
+        echo "${bytes} B"
+    fi
+}
+
 # ─── 使用说明 ───
 usage() {
     echo "CLS-Certify 代码统计工具"
@@ -180,9 +209,14 @@ done < <(eval "find '$TARGET' -type f $EXCLUDES" 2>/dev/null | sort)
 
 TOTAL_FILES=${#ALL_FILES[@]}
 TOTAL_LINES=0
+TOTAL_SIZE_BYTES=0
+EXECUTABLE_LINES=0
+EXECUTABLE_SIZE_BYTES=0
+OVERSIZED_THRESHOLD=51200  # 50KB
 
 # ─── 按语言统计（使用临时文件代替关联数组） ───
 # 每个文件记录一行: 语言 行数
+# FILES_LIST_FILE 格式: relpath \t lang \t lines \t size_bytes
 for file in ${ALL_FILES[@]+"${ALL_FILES[@]}"}; do
     ext=""
     basename_file="${file##*/}"
@@ -193,17 +227,55 @@ for file in ${ALL_FILES[@]+"${ALL_FILES[@]}"}; do
 
     lines=$(wc -l < "$file" 2>/dev/null || echo 0)
     lines=$(echo "$lines" | tr -d ' ')
+    size_bytes=$(get_file_size "$file")
 
     echo "$lang $lines" >> "$LANG_STATS_FILE"
     TOTAL_LINES=$((TOTAL_LINES + lines))
+    TOTAL_SIZE_BYTES=$((TOTAL_SIZE_BYTES + size_bytes))
 
-    # 记录文件清单（相对路径）
+    # 累计可执行语言行数和体积
+    if is_executable_language "$lang"; then
+        EXECUTABLE_LINES=$((EXECUTABLE_LINES + lines))
+        EXECUTABLE_SIZE_BYTES=$((EXECUTABLE_SIZE_BYTES + size_bytes))
+    fi
+
+    # 记录文件清单（相对路径 + 语言 + 行数 + 体积）
     relpath="${file#$TARGET/}"
     if [[ "$relpath" == "$file" ]]; then
         relpath="${file#$TARGET}"
     fi
-    echo "$relpath" >> "$FILES_LIST_FILE"
+    printf "%s\t%s\t%d\t%d\n" "$relpath" "$lang" "$lines" "$size_bytes" >> "$FILES_LIST_FILE"
 done
+
+# ─── 检查 references/ 目录 ───
+HAS_REFERENCES_DIR=false
+REF_CODE_FILES_FILE="$TMP_DIR/ref_code_files.txt"
+touch "$REF_CODE_FILES_FILE"
+
+if [[ -d "$TARGET/references" ]]; then
+    while IFS= read -r rf; do
+        [[ -n "$rf" ]] && {
+            rf_ext=".${rf##*.}"
+            rf_lang=$(ext_to_language "$rf_ext")
+            if is_executable_language "$rf_lang"; then
+                HAS_REFERENCES_DIR=true
+                rf_rel="${rf#$TARGET/}"
+                [[ "$rf_rel" == "$rf" ]] && rf_rel="${rf#$TARGET}"
+                echo "$rf_rel" >> "$REF_CODE_FILES_FILE"
+            fi
+        }
+    done < <(eval "find '$TARGET/references' -type f $EXCLUDES" 2>/dev/null | sort)
+fi
+
+# ─── 收集超大文件 ───
+OVERSIZED_FILES_FILE="$TMP_DIR/oversized_files.txt"
+touch "$OVERSIZED_FILES_FILE"
+while IFS=$'\t' read -r f_path f_lang f_lines f_size; do
+    [[ -z "$f_path" ]] && continue
+    if [[ $f_size -ge $OVERSIZED_THRESHOLD ]]; then
+        printf "%s\t%s\t%d\t%d\n" "$f_path" "$f_lang" "$f_lines" "$f_size" >> "$OVERSIZED_FILES_FILE"
+    fi
+done < "$FILES_LIST_FILE"
 
 # ─── 用 awk 聚合语言统计，按行数降序 ───
 LANG_SUMMARY_FILE="$TMP_DIR/lang_summary.txt"
@@ -393,20 +465,50 @@ if $OUTPUT_JSON; then
         fi
     done < "$BLOCKS_FILE"
 
-    # 构建 files 数组
+    # 构建 files 对象数组
     FILES_JSON=""
-    while IFS= read -r f; do
-        [[ -z "$f" ]] && continue
-        escaped_f=$(echo "$f" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    while IFS=$'\t' read -r f_path f_lang f_lines f_size; do
+        [[ -z "$f_path" ]] && continue
+        escaped_f=$(echo "$f_path" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        file_json=$(printf '{"path":"%s","language":"%s","lines":%d,"size_bytes":%d}' \
+            "$escaped_f" "$f_lang" "$f_lines" "$f_size")
         if [[ -n "$FILES_JSON" ]]; then
-            FILES_JSON="${FILES_JSON},\"${escaped_f}\""
+            FILES_JSON="${FILES_JSON},${file_json}"
         else
-            FILES_JSON="\"${escaped_f}\""
+            FILES_JSON="$file_json"
         fi
     done < "$FILES_LIST_FILE"
 
-    printf '{"tool":"cls-code-stats","target":"%s","total_files":%d,"total_lines":%d,"languages":[%s],"code_blocks":{"total":%d,"high_risk":%d,"medium_risk":%d,"low_risk":%d,"blocks":[%s]},"files":[%s]}\n' \
-        "$TARGET" "$TOTAL_FILES" "$TOTAL_LINES" "$LANGS_JSON" \
+    # 构建 oversized_files 数组
+    OVERSIZED_JSON=""
+    while IFS=$'\t' read -r o_path o_lang o_lines o_size; do
+        [[ -z "$o_path" ]] && continue
+        escaped_o=$(echo "$o_path" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        o_json=$(printf '{"path":"%s","language":"%s","lines":%d,"size_bytes":%d}' \
+            "$escaped_o" "$o_lang" "$o_lines" "$o_size")
+        if [[ -n "$OVERSIZED_JSON" ]]; then
+            OVERSIZED_JSON="${OVERSIZED_JSON},${o_json}"
+        else
+            OVERSIZED_JSON="$o_json"
+        fi
+    done < "$OVERSIZED_FILES_FILE"
+
+    # 构建 reference_code_files 数组
+    REF_CODE_JSON=""
+    while IFS= read -r rf; do
+        [[ -z "$rf" ]] && continue
+        escaped_rf=$(echo "$rf" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        if [[ -n "$REF_CODE_JSON" ]]; then
+            REF_CODE_JSON="${REF_CODE_JSON},\"${escaped_rf}\""
+        else
+            REF_CODE_JSON="\"${escaped_rf}\""
+        fi
+    done < "$REF_CODE_FILES_FILE"
+
+    printf '{"tool":"cls-code-stats","target":"%s","total_files":%d,"total_lines":%d,"total_size_bytes":%d,"executable_lines":%d,"executable_size_bytes":%d,"has_references_dir":%s,"reference_code_files":[%s],"oversized_files":[%s],"languages":[%s],"code_blocks":{"total":%d,"high_risk":%d,"medium_risk":%d,"low_risk":%d,"blocks":[%s]},"files":[%s]}\n' \
+        "$TARGET" "$TOTAL_FILES" "$TOTAL_LINES" "$TOTAL_SIZE_BYTES" \
+        "$EXECUTABLE_LINES" "$EXECUTABLE_SIZE_BYTES" \
+        "$HAS_REFERENCES_DIR" "$REF_CODE_JSON" "$OVERSIZED_JSON" "$LANGS_JSON" \
         "$BLOCK_COUNT" "$BLOCK_HIGH" "$BLOCK_MEDIUM" "$BLOCK_LOW" "$JSON_BLOCKS" \
         "$FILES_JSON"
 else
@@ -417,8 +519,12 @@ else
     echo "────────────────────────────────────────"
 
     echo -e "${BOLD}文件统计:${RESET}"
-    printf "  总文件数: %s\n" "$(format_number "$TOTAL_FILES")"
-    printf "  总行数:   %s\n" "$(format_number "$TOTAL_LINES")"
+    printf "  总文件数:     %s\n" "$(format_number "$TOTAL_FILES")"
+    printf "  总行数:       %s\n" "$(format_number "$TOTAL_LINES")"
+    printf "  总体积:       %s\n" "$(format_size "$TOTAL_SIZE_BYTES")"
+    printf "  可执行代码行: %s\n" "$(format_number "$EXECUTABLE_LINES")"
+    printf "  可执行代码量: %s\n" "$(format_size "$EXECUTABLE_SIZE_BYTES")"
+    printf "  references/:  %s\n" "$($HAS_REFERENCES_DIR && echo '存在' || echo '无')"
 
     echo ""
     echo -e "${BOLD}语言分布:${RESET}"
@@ -476,11 +582,23 @@ else
         done < "$BLOCKS_FILE"
     fi
 
+    # ─── 超大文件警告 ───
+    oversized_count=$(wc -l < "$OVERSIZED_FILES_FILE" | tr -d ' ')
+    if [[ $oversized_count -gt 0 ]]; then
+        echo ""
+        echo -e "${RED}${BOLD}超大文件 (>50KB):${RESET}"
+        while IFS=$'\t' read -r o_path o_lang o_lines o_size; do
+            [[ -z "$o_path" ]] && continue
+            echo -e "  ${RED}[$(format_size "$o_size")]${RESET}  ${o_path}  (${o_lang}, ${o_lines} 行)"
+        done < "$OVERSIZED_FILES_FILE"
+    fi
+
     echo ""
     echo "────────────────────────────────────────"
     echo -e "${BOLD}文件清单 (${TOTAL_FILES} 个文件):${RESET}"
-    while IFS= read -r f; do
-        [[ -n "$f" ]] && echo "  $f"
+    while IFS=$'\t' read -r f_path f_lang f_lines f_size; do
+        [[ -z "$f_path" ]] && continue
+        printf "  %-40s  %-12s  %5d 行  %s\n" "$f_path" "$f_lang" "$f_lines" "$(format_size "$f_size")"
     done < "$FILES_LIST_FILE"
     echo ""
 fi

@@ -67,6 +67,9 @@ STAMP_COLOR=$(get_field "stamp_color")
 TOTAL_FINDINGS=$(get_field "total_findings")
 SAMPLE_HASH=$(get_field "sample_hash")
 DISCLAIMER=$(get_field "disclaimer")
+SKILL_TIER=$(get_field "skill_tier")
+SKILL_TIER_NAME=$(get_field "skill_tier_name")
+SCAN_STRATEGY=$(get_field "scan_strategy")
 
 # ─── 派生值 ───
 if [[ "$STAMP_COLOR" == "red" ]]; then
@@ -92,6 +95,18 @@ if [[ -z "$LICENSE" || "$LICENSE" == "无许可证" || "$LICENSE" == "none" ]]; 
 else
   LICENSE_TAG="<span class=\"tag tag-mit\">${LICENSE}</span>"
 fi
+
+# skill_tier tag
+SKILL_TIER=${SKILL_TIER:-none}
+SKILL_TIER_NAME=${SKILL_TIER_NAME:-未分类}
+SCAN_STRATEGY=${SCAN_STRATEGY:-auto}
+case "$SKILL_TIER" in
+  T-MD)    TIER_TAG="<span class=\"tag\" style=\"background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;\">${SKILL_TIER} · ${SKILL_TIER_NAME}</span>" ;;
+  T-LITE)  TIER_TAG="<span class=\"tag\" style=\"background:var(--accent-light);color:var(--accent);border:1px solid rgba(45,95,138,0.2);\">${SKILL_TIER} · ${SKILL_TIER_NAME}</span>" ;;
+  T-REF)   TIER_TAG="<span class=\"tag\" style=\"background:#fff3e0;color:#e65100;border:1px solid #ffcc80;\">${SKILL_TIER} · ${SKILL_TIER_NAME}</span>" ;;
+  T-HEAVY) TIER_TAG="<span class=\"tag\" style=\"background:var(--yellow-bg);color:var(--yellow);border:1px solid rgba(241,196,15,0.3);\">${SKILL_TIER} · ${SKILL_TIER_NAME}</span>" ;;
+  *)       TIER_TAG="<span class=\"tag tag-t2\">${SKILL_TIER} · ${SKILL_TIER_NAME}</span>" ;;
+esac
 
 # recommendations title
 case "$GRADE" in
@@ -133,12 +148,19 @@ DOTS_HTML=""
 
 for i in 0 1 2 3 4 5; do
   s=${RADAR_SCORES[$i]}
+  # N/A 维度 (score=-1) 雷达图上显示为 0
+  if [[ "$s" == "-1" ]]; then s=0; fi
   r=$(echo "$s * 1.1" | bc)
   x=$(printf "%.1f" "$(echo "150 + $r * ${COS_VALS[$i]}" | bc)")
   y=$(printf "%.1f" "$(echo "150 + $r * ${SIN_VALS[$i]}" | bc)")
   if [[ $i -gt 0 ]]; then POLYGON_POINTS+=" "; fi
   POLYGON_POINTS+="${x},${y}"
-  DOTS_HTML+="<circle cx=\"${x}\" cy=\"${y}\" r=\"3.5\" fill=\"${RADAR_STROKE}\"/>"
+  # N/A 维度用灰色圆点
+  if [[ "${RADAR_SCORES[$i]}" == "-1" ]]; then
+    DOTS_HTML+="<circle cx=\"${x}\" cy=\"${y}\" r=\"3.5\" fill=\"#ccc\"/>"
+  else
+    DOTS_HTML+="<circle cx=\"${x}\" cy=\"${y}\" r=\"3.5\" fill=\"${RADAR_STROKE}\"/>"
+  fi
 done
 
 # ─── 生成 radar legend HTML ───
@@ -151,11 +173,15 @@ for i in 0 1 2 3 4 5; do
     pass) dot_color="var(--green)"; score_color="var(--green)"; badge_class="pass"; badge_text="✓ 通过" ;;
     warn) dot_color="var(--yellow)"; score_color="var(--yellow)"; badge_class="warn"; badge_text="⚠ 警告" ;;
     fail) dot_color="var(--red)"; score_color="var(--red)"; badge_class="fail"; badge_text="❌ 危险" ;;
+    na)   dot_color="#ccc"; score_color="#999"; badge_class="na"; badge_text="— N/A" ;;
   esac
+  # N/A 维度显示 "N/A" 而非 -1
+  display_score="$score"
+  if [[ "$score" == "-1" ]]; then display_score="N/A"; fi
   LEGEND_HTML+="<div class=\"legend-item\">"
   LEGEND_HTML+="<span class=\"legend-dot\" style=\"background:${dot_color};\"></span>"
   LEGEND_HTML+="<span class=\"legend-name\">${name}</span>"
-  LEGEND_HTML+="<span class=\"legend-score\" style=\"color:${score_color};\">${score}</span>"
+  LEGEND_HTML+="<span class=\"legend-score\" style=\"color:${score_color};\">${display_score}</span>"
   LEGEND_HTML+="<span class=\"legend-status ${badge_class}\">${badge_text}</span>"
   LEGEND_HTML+="</div>"
 done
@@ -422,6 +448,8 @@ replace_placeholder "findings_count" "$FINDINGS_COUNT"
 # 复合 HTML 片段同样用环境变量传值（避免 shell/perl 双层解释）
 CLS_REPLACE_VALUE="$TRUST_TAG" perl -pi -e 's/\Q{{trust_level_tag}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$LICENSE_TAG" perl -pi -e 's/\Q{{license_tag}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$TIER_TAG" perl -pi -e 's/\Q{{skill_tier_tag}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$SCAN_STRATEGY" perl -pi -e 's/\Q{{scan_strategy}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$EVALUATION" perl -pi -e 's/\Q{{evaluation}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$TAGS_HTML" perl -pi -e 's/\Q{{PATTERN_TAGS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$SUMMARY_HTML" perl -pi -e 's/\Q{{SUMMARY_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"

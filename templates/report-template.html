@@ -486,6 +486,7 @@
   .legend-status.pass { background: var(--green-bg); color: var(--green); }
   .legend-status.warn { background: var(--yellow-bg); color: var(--yellow); }
   .legend-status.fail { background: var(--red-bg); color: var(--red); }
+  .legend-status.na { background: #f0f0f0; color: #999; }
 
   .radar-legend-keys {
     display: flex;
@@ -775,6 +776,7 @@
   .compliance-icon.pass { background: var(--green-bg); color: var(--green); }
   .compliance-icon.warn { background: var(--yellow-bg); color: var(--yellow); }
   .compliance-icon.fail { background: var(--red-bg); color: var(--red); }
+  .compliance-icon.na { background: #f0f0f0; color: #999; }
 
   .compliance-text { color: var(--ink-light); font-weight: 500; }
 
@@ -1144,6 +1146,14 @@
       <div class="meta-cell">
         <span class="meta-label">代码行数</span>
         <span class="meta-value">{{code_stats}}</span>
+      </div>
+      <div class="meta-cell">
+        <span class="meta-label">Skill 分类</span>
+        <span class="meta-value">{{skill_tier_tag}}</span>
+      </div>
+      <div class="meta-cell">
+        <span class="meta-label">扫描策略</span>
+        <span class="meta-value">{{scan_strategy}}</span>
       </div>
     </div>
 

@@ -38,13 +38,21 @@ if [[ ! -f "$TEMPLATE" ]]; then
   echo "错误: 找不到模板文件 $TEMPLATE" >&2; exit 1
 fi
 
+# Markdown 内联标记 → HTML 转换
+md_inline_to_html() {
+  echo "$1" \
+    | sed -E 's/\*\*([^*]+)\*\*/<strong>\1<\/strong>/g' \
+    | sed -E 's/\*([^*]+)\*/<em>\1<\/em>/g' \
+    | sed -E 's/`([^`]+)`/<code>\1<\/code>/g'
+}
+
 # ─── 提取 frontmatter 和 body ───
 FRONTMATTER=$(awk '/^---$/{n++; next} n==1{print}' "$INPUT")
 BODY=$(awk '/^---$/{n++; next} n>=2{print}' "$INPUT")
 
 # ─── 从 frontmatter 提取标量字段 ───
 get_field() {
-  echo "$FRONTMATTER" | grep -E "^${1}:" | head -1 | sed -E "s/^${1}:[[:space:]]*//" | sed 's/^"//;s/"$//'
+  echo "$FRONTMATTER" | { grep -E "^${1}:" || true; } | head -1 | sed -E "s/^${1}:[[:space:]]*//" | sed 's/^"//;s/"$//'
 }
 
 REPORT_ID=$(get_field "report_id")
@@ -210,6 +218,7 @@ while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   severity=$(echo "$line" | sed -E 's/^- ([a-z]+):.*/\1/')
   text=$(echo "$line" | sed -E 's/^- [a-z]+:[[:space:]]*//')
+  text=$(md_inline_to_html "$text")
   TAGS_HTML+="<span class=\"pattern-tag ${severity}\">${text}</span>"
 done <<< "$TAGS_SECTION"
 
@@ -219,6 +228,7 @@ SUMMARY_HTML=""
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   text=$(echo "$line" | sed -E 's/^[0-9]+\.[[:space:]]*//')
+  text=$(md_inline_to_html "$text")
   SUMMARY_HTML+="<li>${text}</li>"
 done <<< "$SUMMARY_SECTION"
 
@@ -289,6 +299,11 @@ in_evidence=0
 flush_finding() {
   [[ -z "$f_title" ]] && return
   FINDINGS_COUNT=$((FINDINGS_COUNT + 1))
+
+  # Markdown 内联标记转换
+  f_title=$(md_inline_to_html "$f_title")
+  f_description=$(md_inline_to_html "$f_description")
+  f_recommendation=$(md_inline_to_html "$f_recommendation")
 
   # severity 样式映射
   case "$f_severity" in
@@ -390,6 +405,8 @@ rec_desc=""
 
 flush_rec() {
   [[ -z "$rec_title" ]] && return
+  rec_title=$(md_inline_to_html "$rec_title")
+  rec_desc=$(md_inline_to_html "$rec_desc")
   RECOMMENDATIONS_HTML+="<li class=\"rec-item\">"
   RECOMMENDATIONS_HTML+="<span class=\"rec-num\">${rec_num}</span>"
   RECOMMENDATIONS_HTML+="<div class=\"rec-content\">"

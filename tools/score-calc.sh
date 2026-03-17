@@ -272,6 +272,7 @@ process_threat_scan() {
 
     # 跟踪各类别
     local exfiltration_count=0
+    local agent_context_count=0
 
     while IFS= read -r item; do
         [[ -z "$item" ]] && continue
@@ -382,6 +383,13 @@ process_threat_scan() {
                 CAP_C=true
                 add_grade_cap "threat-scan: conditional_trigger 触发最高 C 级"
                 ;;
+            agent_context)
+                # agent_context 候选不直接判分，仅标记为疑似点
+                # 需由 Agent 执行完整恶意行为分析后，通过 threat-verify 确认后
+                # 以 confirmed 身份重新归入 privilege_escalation/prompt_poison 等 category 计分
+                # 此处仅做统计记录，不扣分不降级
+                agent_context_count=$((agent_context_count + 1))
+                ;;
         esac
     done < <(json_array_iterate "$findings")
 
@@ -391,11 +399,18 @@ process_threat_scan() {
         add_grade_cap "threat-scan: exfiltration 批量发现（${exfiltration_count} 个），最高 C 级"
     fi
 
+    # agent_context 疑似点记录（不扣分，待 Agent 恶意行为分析后决定）
+    if [[ $agent_context_count -gt 0 ]]; then
+        add_deduction "threat-scan" "0" "发现 ${agent_context_count} 个 Agent 上下文疑似点（待行为分析确认）" ""
+    fi
+
     if [[ $total_deduct -gt 0 ]]; then
         add_deduction "threat-scan" "-${total_deduct}" "发现 ${finding_count} 个安全威胁" "$detail_items"
         TOTAL_DEDUCTION=$((TOTAL_DEDUCTION + total_deduct))
     else
-        add_deduction "threat-scan" "0" "未发现安全威胁" ""
+        if [[ $agent_context_count -eq 0 ]]; then
+            add_deduction "threat-scan" "0" "未发现安全威胁" ""
+        fi
     fi
 }
 

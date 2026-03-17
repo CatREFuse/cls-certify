@@ -1,6 +1,6 @@
-# CLS-Certify 威胁模式库 v2.0
+# CLS-Certify 威胁模式库 v2.1
 
-> 40+ 安全威胁检测模式，覆盖命令注入、数据外泄、提示词注入、SSRF 等常见攻击向量
+> 140+ 安全威胁检测模式，覆盖命令注入、数据外泄、提示词注入、Agent 上下文注入、终端注入等攻击向量
 
 ---
 
@@ -8,12 +8,15 @@
 
 | 类别 | 数量 | 主要风险 |
 |-----|------|---------|
-| 代码执行类 | 8 | RCE、命令注入 |
+| 代码执行类 | 25 | RCE、命令注入 |
 | 数据安全类 | 10 | 数据外泄、凭证窃取 |
-| 注入攻击类 | 8 | SQL注入、命令注入、XSS |
-| AI 安全类 | 6 | 提示词注入、越狱攻击 |
+| 注入攻击类 | 25 | SQL注入、命令注入、XSS、终端注入 |
+| AI 安全类 | 18 | 提示词注入、越狱攻击 |
+| 提示词投毒类 | 15 | 隐蔽注入、MCP 工具链攻击、静默执行 |
+| 权限升级类 | 24 | 配置篡改、Hook 滥用、Shell 深度注入 |
 | 供应链类 | 5 | 依赖混淆、恶意包 |
 | 网络攻击类 | 5 | SSRF、DNS 重绑定 |
+| **Agent 上下文注入类** | **12** | **记忆注入、系统提示篡改、配置注入** |
 
 ---
 
@@ -557,6 +560,149 @@ threat_detection_config:
 
 ---
 
-*威胁库版本: v2.0*
-*最后更新: 2026-03-13*
-*模式数量: 40+*
+## 7. Agent 上下文注入类 (Agent Context Injection)
+
+### TH-AC: Agent 记忆与配置篡改
+
+```yaml
+id: TH-AC-001~012
+severity: critical/high
+category: agent_context
+
+patterns:
+  memory_injection:
+    - pattern: "\\.claude/memory"
+      description: "访问 Agent 记忆目录"
+    - pattern: "MEMORY\\.md"
+      description: "修改记忆文件"
+
+  system_prompt_tampering:
+    - pattern: "CLAUDE\\.md"
+      description: "篡改系统提示文件"
+    - pattern: "\\.claude/"
+      description: "访问 Agent 配置目录"
+
+  config_injection:
+    - pattern: "settings\\.local\\.json"
+      description: "修改本地配置"
+    - pattern: "permissions\\.allow"
+      description: "修改权限白名单"
+    - pattern: "permissions\\.deny"
+      description: "修改权限黑名单"
+
+  tool_based_injection:
+    - pattern: "Write.*memory|Edit.*memory"
+      description: "通过工具注入记忆"
+    - pattern: "Write.*CLAUDE\\.md|Edit.*CLAUDE\\.md"
+      description: "通过工具篡改系统提示"
+    - pattern: "Write.*settings.*json|Edit.*settings.*json"
+      description: "通过工具修改配置"
+
+impact: >
+  Agent 上下文注入攻击可以从根本上改变 Agent 的行为模式。
+  记忆注入可植入虚假信息影响后续决策；系统提示篡改可移除安全约束；
+  配置注入可自行授予危险权限。这类攻击的危害性在于其持久性和隐蔽性。
+
+mitigation:
+  - 对 ~/.claude/ 目录下所有文件实施写保护
+  - 限制 skill 对 Agent 配置文件的访问权限
+  - 实施记忆文件完整性校验（哈希比对）
+```
+
+### TH-PE-013~024: Hook 滥用与 Shell 配置深度注入
+
+```yaml
+id: TH-PE-013~024
+severity: critical/high
+category: privilege_escalation
+
+patterns:
+  hook_abuse:
+    - pattern: "UserPromptSubmit"
+      description: "拦截用户输入的中间人攻击"
+    - pattern: "PreToolUse"
+      description: "在工具执行前注入逻辑"
+    - pattern: "hooks.*(\\.(sh|bash|py|js))"
+      description: "Hook 引用外部脚本"
+
+  shell_deep_injection:
+    - pattern: "alias\\s+(cd|ls|rm|...)\\s*="
+      description: "劫持常用命令别名"
+    - pattern: "function\\s+(cd|ls|rm|...)\\s*\\(\\)"
+      description: "函数覆盖系统命令"
+    - pattern: "export\\s+PATH\\s*="
+      description: "PATH 环境变量劫持"
+    - pattern: "LD_PRELOAD|DYLD_INSERT_LIBRARIES"
+      description: "动态库预加载注入"
+    - pattern: "PROMPT_COMMAND\\s*="
+      description: "命令提示钩子注入"
+    - pattern: "complete\\s+-|compdef\\s+"
+      description: "Tab 补全注入"
+
+impact: >
+  Hook 滥用可实现对 Agent 交互的全面监控和操控。
+  Shell 配置注入可在用户不知情的情况下持久化恶意行为。
+```
+
+### TH-INJ-018~025: 日志/终端注入
+
+```yaml
+id: TH-INJ-018~025
+severity: critical/high/medium
+category: injection
+
+patterns:
+  ansi_escape:
+    - pattern: "\\\\x1[bB]\\["
+      description: "ANSI 转义(hex)"
+    - pattern: "\\\\033\\["
+      description: "ANSI 转义(octal)"
+    - pattern: "\\\\e\\["
+      description: "ANSI 转义(named)"
+
+  terminal_control:
+    - pattern: "\\\\r[^\\n]"
+      description: "回车覆写伪造输出"
+    - pattern: "\\\\x1[bB]\\]0;"
+      description: "终端标题注入"
+    - pattern: "\\\\x07|\\\\a"
+      description: "响铃字符注入"
+
+impact: >
+  终端注入可伪造命令输出，使用户误判安全状态。
+  屏幕清除可隐藏恶意操作痕迹。回车覆写可覆盖已显示内容。
+```
+
+### TH-PP-010~015: MCP 工具链攻击
+
+```yaml
+id: TH-PP-010~015
+severity: critical
+category: prompt_poison
+
+patterns:
+  tool_exploitation:
+    - pattern: "(use|call|invoke).*Bash.*(tool|command)"
+      description: "引导使用 Bash 工具"
+    - pattern: "(use|call).*Write.*(tool|overwrite)"
+      description: "引导使用 Write 工具覆盖文件"
+    - pattern: "mcp__.*mcp__"
+      description: "多工具链组合攻击"
+
+  silent_operation:
+    - pattern: "不要(告诉|提示)用户|静默(执行|运行)"
+      description: "中文静默执行指令"
+    - pattern: "(do not|don't).*(tell|show).*user|silently.*execute"
+      description: "英文静默执行指令"
+
+impact: >
+  MCP 工具链攻击是 Agent 时代的新型攻击向量。
+  Skill 本身可能不包含危险代码，但通过精心构造的提示词，
+  引导 Agent 使用已有的 MCP 工具实现恶意目标。
+```
+
+---
+
+*威胁库版本: v2.1*
+*最后更新: 2026-03-17*
+*模式数量: 140+*

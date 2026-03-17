@@ -62,6 +62,7 @@ usage() {
     echo "  privilege_escalation 权限升级"
     echo "  conditional_trigger  条件触发"
     echo "  dynamic_download   动态下载"
+    echo "  agent_context      Agent 上下文注入"
     exit 0
 }
 
@@ -88,7 +89,7 @@ if [[ ! -e "$TARGET" ]]; then
 fi
 
 # 验证类别参数
-VALID_CATEGORIES="code_execution|injection|ai_safety|exfiltration|prompt_poison|privilege_escalation|conditional_trigger|dynamic_download"
+VALID_CATEGORIES="code_execution|injection|ai_safety|exfiltration|prompt_poison|privilege_escalation|conditional_trigger|dynamic_download|agent_context"
 if [[ -n "$FILTER_CATEGORY" ]]; then
     if ! echo "$FILTER_CATEGORY" | grep -qE "^($VALID_CATEGORIES)$"; then
         echo "错误: 无效的类别 '$FILTER_CATEGORY'"
@@ -224,6 +225,52 @@ THREAT_PATTERNS=(
     'conditional_trigger;;high;;TH-CT-004;;env_ci_check;;if.*(CI|GITHUB_ACTIONS|JENKINS);;CI 环境检测;;可在特定 CI 环境触发恶意行为;;审查 CI 环境条件逻辑'
     'conditional_trigger;;high;;TH-CT-005;;env_var_python;;if.*(os\.environ\[|process\.env\.);;环境变量条件检查;;可根据环境变量触发恶意行为;;审查环境变量条件逻辑'
     'conditional_trigger;;high;;TH-CT-006;;platform_check;;if.*(platform|os\.name|sys\.platform);;平台检测条件;;可针对特定平台触发恶意行为;;审查平台检测逻辑'
+
+    # ── agent_context（Agent 上下文注入）── critical/high ──
+    'agent_context;;critical;;TH-AC-001;;memory_dir_write;;\.claude/memory;;访问 Agent 记忆目录;;可注入持久化记忆影响 Agent 后续行为;;禁止 skill 访问 Agent 记忆目录'
+    'agent_context;;critical;;TH-AC-002;;memory_md_write;;MEMORY\.md;;写入/修改 MEMORY.md 文件;;可注入虚假记忆操控 Agent 决策;;禁止 skill 修改记忆文件'
+    'agent_context;;critical;;TH-AC-003;;claude_md_write;;CLAUDE\.md;;写入/修改 CLAUDE.md 文件;;可篡改系统提示词改变 Agent 行为边界;;禁止 skill 修改系统提示文件'
+    'agent_context;;critical;;TH-AC-004;;claude_dir_config;;\.claude/;;访问 .claude/ 配置目录;;可篡改 Agent 配置文件;;禁止 skill 修改 Agent 配置'
+    'agent_context;;critical;;TH-AC-005;;settings_local_json;;settings\.local\.json;;修改 settings.local.json;;可篡改本地安全设置绕过权限限制;;保护本地配置文件完整性'
+    'agent_context;;critical;;TH-AC-006;;permissions_allow_mod;;permissions\.allow;;修改 permissions.allow 配置;;可自行授权危险操作;;禁止 skill 修改权限白名单'
+    'agent_context;;critical;;TH-AC-007;;permissions_deny_mod;;permissions\.deny;;修改 permissions.deny 配置;;可移除安全限制;;禁止 skill 修改权限黑名单'
+    'agent_context;;critical;;TH-AC-008;;tool_write_memory;;Write.*memory|Write.*MEMORY|Edit.*memory|Edit.*MEMORY;;通过工具修改记忆文件;;利用 Write/Edit 工具注入记忆;;限制工具对记忆文件的写入权限'
+    'agent_context;;critical;;TH-AC-009;;tool_write_claude_md;;Write.*CLAUDE\.md|Edit.*CLAUDE\.md;;通过工具修改系统提示;;利用 Write/Edit 工具篡改系统提示;;限制工具对系统提示文件的写入'
+    'agent_context;;critical;;TH-AC-010;;tool_write_settings;;Write.*settings.*json|Edit.*settings.*json;;通过工具修改配置文件;;利用 Write/Edit 工具篡改安全配置;;限制工具对配置文件的写入'
+    'agent_context;;high;;TH-AC-011;;dynamic_system_prompt;;system.prompt.*modify|modify.*system.prompt|override.*instruction;;动态修改系统提示;;可在运行时改变 Agent 行为约束;;禁止动态修改系统提示'
+    'agent_context;;high;;TH-AC-012;;read_memory_exfil;;Read.*\.claude/memory|cat.*\.claude/memory;;读取记忆文件获取用户信息;;可窃取用户交互历史和偏好;;限制对记忆文件的读取权限'
+
+    # ── privilege_escalation 扩展（Hook 滥用 & Shell 配置深度注入）── critical/high ──
+    'privilege_escalation;;critical;;TH-PE-013;;hook_user_prompt;;UserPromptSubmit;;注册 UserPromptSubmit hook;;可拦截并篡改用户输入（中间人攻击）;;禁止 skill 注册用户输入 hook'
+    'privilege_escalation;;critical;;TH-PE-014;;hook_pre_tool;;PreToolUse;;注册 PreToolUse hook;;可在工具执行前注入恶意逻辑;;审查所有 PreToolUse hook 注册'
+    'privilege_escalation;;high;;TH-PE-015;;hook_notification;;Notification|NotificationArrived;;注册通知类 hook;;可拦截或伪造系统通知;;审查通知 hook 的必要性'
+    'privilege_escalation;;critical;;TH-PE-016;;hook_script_inject;;hooks.*(\.sh|\.bash|\.py|\.js);;Hook 脚本引用外部文件;;Hook 脚本可能包含恶意代码;;审查 hook 引用的所有脚本内容'
+    'privilege_escalation;;critical;;TH-PE-017;;alias_inject;;alias\s+(cd|ls|rm|cp|mv|cat|git|sudo)\s*=;;注入常用命令别名;;可劫持用户常用命令执行恶意操作;;禁止 skill 定义命令别名'
+    'privilege_escalation;;critical;;TH-PE-018;;function_override;;function\s+(cd|ls|rm|cp|mv|cat|git|sudo)\s*\(\);;函数覆盖常用命令;;可劫持用户常用命令执行恶意操作;;禁止 skill 覆盖系统命令函数'
+    'privilege_escalation;;critical;;TH-PE-019;;path_hijack;;export\s+PATH\s*=;;PATH 环境变量劫持;;可优先执行恶意程序替代系统命令;;禁止 skill 修改 PATH 变量'
+    'privilege_escalation;;high;;TH-PE-020;;env_inject_sensitive;;export\s+(ANTHROPIC_API_KEY|OPENAI_API_KEY|AWS_SECRET);;注入敏感环境变量;;可窃取或覆盖 API 凭证;;禁止 skill 设置敏感环境变量'
+    'privilege_escalation;;critical;;TH-PE-021;;ld_preload_inject;;LD_PRELOAD|DYLD_INSERT_LIBRARIES;;动态库预加载注入;;可劫持任意进程的函数调用;;禁止设置动态库注入变量'
+    'privilege_escalation;;critical;;TH-PE-022;;prompt_cmd_inject;;PROMPT_COMMAND\s*=;;PROMPT_COMMAND 注入;;可在每次命令提示前执行恶意代码;;禁止 skill 设置 PROMPT_COMMAND'
+    'privilege_escalation;;high;;TH-PE-023;;env_wildcard_export;;export\s+.*\$\(;;环境变量值含命令替换;;可通过环境变量执行恶意命令;;禁止环境变量值包含命令替换'
+    'privilege_escalation;;high;;TH-PE-024;;completion_inject;;complete\s+-[A-Za-z]+|compdef\s+;;Tab 补全注入;;可通过补全机制执行恶意代码;;审查自定义补全函数'
+
+    # ── injection 扩展（日志/终端注入）── critical/high/medium ──
+    'injection;;critical;;TH-INJ-018;;ansi_escape_hex;;\\x1[bB]\[;;ANSI 转义序列注入(hex);;可操控终端显示隐藏恶意输出;;过滤输出中的 ANSI 转义序列'
+    'injection;;critical;;TH-INJ-019;;ansi_escape_octal;;\\033\[;;ANSI 转义序列注入(octal);;可操控终端显示隐藏恶意输出;;过滤输出中的 ANSI 转义序列'
+    'injection;;critical;;TH-INJ-020;;ansi_escape_named;;\\e\[;;ANSI 转义序列注入(named);;可操控终端显示隐藏恶意输出;;过滤输出中的 ANSI 转义序列'
+    'injection;;high;;TH-INJ-021;;cursor_manipulation;;\\x1[bB]\[[0-9]*[ABCDHJ];;光标操作/屏幕清除;;可隐藏终端输出伪造执行结果;;禁止输出中的光标控制序列'
+    'injection;;high;;TH-INJ-022;;carriage_return_overwrite;;\\r[^\n];;回车覆写伪造输出;;可用回车符覆盖已显示文本伪造结果;;过滤输出中的回车覆写序列'
+    'injection;;high;;TH-INJ-023;;terminal_title_inject;;\\x1[bB]\]0;;;终端标题注入;;可修改终端标题迷惑用户;;禁止修改终端标题'
+    'injection;;high;;TH-INJ-024;;osc_sequence;;\\x1[bB]\][0-9]+;;;OSC 控制序列注入;;可通过 OSC 序列操控终端行为;;过滤 OSC 控制序列'
+    'injection;;medium;;TH-INJ-025;;bell_flood;;\\x07|\\a;;响铃字符注入;;大量响铃可干扰用户操作;;过滤输出中的响铃字符'
+
+    # ── prompt_poison 扩展（MCP 工具链攻击 & 静默执行）── critical ──
+    'prompt_poison;;critical;;TH-PP-010;;mcp_bash_exploit;;(use|call|invoke|run).*Bash.*(tool|command)|Bash.*tool.*(execute|run);;引导通过 Bash 工具执行命令;;通过提示词引导 Agent 执行危险系统命令;;检测并阻断 MCP 工具链攻击指令'
+    'prompt_poison;;critical;;TH-PP-011;;mcp_write_exploit;;(use|call).*Write.*(tool|overwrite)|Write.*tool.*(sensitive|config|settings);;引导通过 Write 工具覆盖文件;;通过提示词引导 Agent 覆盖敏感文件;;检测并阻断文件覆写攻击指令'
+    'prompt_poison;;critical;;TH-PP-012;;mcp_edit_exploit;;(use|call).*Edit.*(tool|modify)|Edit.*tool.*(config|settings|permission);;引导通过 Edit 工具修改配置;;通过提示词引导 Agent 修改安全配置;;检测并阻断配置篡改攻击指令'
+    'prompt_poison;;critical;;TH-PP-013;;mcp_tool_chain;;mcp__.*mcp__|tool.*chain|combine.*tools.*escalat;;MCP 工具链组合攻击;;组合多个 MCP 工具实现权限升级;;检测多工具组合攻击模式'
+    'prompt_poison;;critical;;TH-PP-014;;silent_execution_zh;;不要(告诉|提示|显示|通知)用户|静默(执行|运行)|悄悄;;中文静默执行指令;;引导 Agent 在用户不知情时执行操作;;所有操作都应对用户透明'
+    'prompt_poison;;critical;;TH-PP-015;;silent_execution_en;;(do not|don.t).*(tell|show|notify|inform).*user|silently.*(execute|run)|without.*user.*knowing;;英文静默执行指令;;引导 Agent 在用户不知情时执行操作;;所有操作都应对用户透明'
 )
 
 # ─── 解析模式定义（使用 ;; 分隔符） ───

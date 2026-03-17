@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- [FIX-1] 标题改为 {技能名称} - CLS 安全认证报告 -->
+<title>summarize - CLS 安全认证报告</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@400;600;700&display=swap');
+
+  :root {
+    --paper: #FDFAF5;
+    --paper-shadow: #E8E0D4;
+    --ink: #1A1A1A;
+    --ink-light: #4A4A4A;
+    --ink-muted: #8A8A8A;
+    --accent: #2D5F8A;
+    --accent-light: #E8F0F8;
+    --red: #C0392B;
+    --red-bg: #FDECEB;
+    --orange: #D35400;
+    --orange-bg: #FDF0E6;
+    --yellow: #B7950B;
+    --yellow-bg: #FDF9E6;
+    --green: #1E8449;
+    --green-bg: #E8F8EE;
+    --blue: #2471A3;
+    --blue-bg: #E8F0F8;
+    --gold: #B8860B;
+    --border: #D5CFC4;
+    --divider: #E8E0D4;
+    --stamp-green: #1B7A3D;
+    --stamp-red: #B22222;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #E8E0D4;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, #D4CCC0 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, #DDD5C8 0%, transparent 50%);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--ink);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 860px;
+    margin: 40px auto;
+    background: var(--paper);
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(0,0,0,0.015) 28px, rgba(0,0,0,0.015) 29px);
+    box-shadow:
+      0 1px 3px rgba(0,0,0,0.08),
+      0 8px 30px rgba(0,0,0,0.12),
+      inset 0 0 80px rgba(0,0,0,0.01);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    position: relative;
+    /* overflow: hidden 会阻止分页，仅在屏幕端使用 */
+  }
+
+  @media screen {
+    .page { overflow: hidden; }
+  }
+
+  .page::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 6px;
+    background: linear-gradient(90deg, var(--accent), #1a3d5c, var(--accent));
+  }
+
+  [data-stamp-color="red"] .page::before {
+    background: linear-gradient(90deg, var(--red), #8B0000, var(--red));
+  }
+  [data-stamp-color="red"] .stamp-grade,
+  [data-stamp-color="red"] .stamp-label { color: var(--stamp-red); }
+  [data-stamp-color="red"] .rating-eval { border-left-color: var(--red); }
+  [data-stamp-color="red"] .score-fill { background: linear-gradient(90deg, #8B0000, #C0392B); }
+  [data-stamp-color="red"] .key-actual::before { background: var(--red); }
+  [data-stamp-color="red"] .summary-list li::before {
+    color: var(--red); background: var(--red-bg); border-color: rgba(192,57,43,0.15);
+  }
+  [data-stamp-color="red"] .rec-num {
+    color: var(--red); background: var(--red-bg); border-color: rgba(192,57,43,0.15);
+  }
+
+  .page::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+  }
+
+  .content { padding: 56px 64px 48px; position: relative; z-index: 1; }
+
+  .report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 32px;
+  }
+
+  .header-left {}
+
+  .report-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  .report-title .skill-name-highlight {
+    color: var(--accent);
+    font-size: 28px;
+    letter-spacing: 2px;
+  }
+
+  .report-subtitle {
+    font-size: 13px;
+    color: var(--ink-light);
+    margin-top: 6px;
+    font-weight: 400;
+  }
+
+  .report-version {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    background: var(--accent-light);
+    padding: 3px 10px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-top: 10px;
+    border: 1px solid rgba(45,95,138,0.15);
+  }
+
+  .header-right {
+    text-align: right;
+    flex-shrink: 0;
+    margin-left: 32px;
+  }
+
+  .report-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-bottom: 6px;
+  }
+
+  .report-date {
+    font-size: 13px;
+    color: var(--ink-light);
+  }
+
+  /* [FIX-2] QR 码样式 */
+  .qr-code {
+    width: 64px; height: 64px;
+    margin-top: 10px;
+    margin-left: auto;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .qr-code img {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .rating-section {
+    display: flex;
+    gap: 36px;
+    align-items: flex-start;
+    margin-bottom: 36px;
+  }
+
+  .stamp-container {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .rating-stamp {
+    width: 140px;
+    height: 140px;
+    position: relative;
+    transform: rotate(-8deg);
+  }
+
+  .rating-stamp svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .stamp-grade {
+    position: absolute;
+    top: 42%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Inter', sans-serif;
+    font-size: 52px;
+    font-weight: 900;
+    color: var(--stamp-green);
+    line-height: 1;
+    letter-spacing: -2px;
+    z-index: 1;
+  }
+
+  .stamp-label {
+    position: absolute;
+    top: 66%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--stamp-green);
+    text-transform: uppercase;
+    z-index: 1;
+  }
+
+  .rating-info { flex: 1; }
+
+  .rating-score-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  .score-number {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .score-max {
+    font-size: 16px;
+    color: var(--ink-muted);
+    font-weight: 400;
+  }
+
+  .score-track {
+    flex: 1;
+    height: 10px;
+    background: #EDEDED;
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .score-fill {
+    height: 100%;
+    border-radius: 5px;
+    background: linear-gradient(90deg, #2D5F8A, #1B7A3D);
+  }
+
+  .rating-eval {
+    font-size: 14px;
+    color: var(--ink-light);
+    line-height: 1.7;
+    padding: 12px 16px;
+    background: #F8F6F1;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 36px;
+  }
+
+  .meta-cell {
+    background: var(--paper);
+    padding: 12px 16px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .meta-label {
+    font-size: 11px;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    min-width: 70px;
+  }
+
+  .meta-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .meta-value .tag {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .tag-t2 { background: var(--yellow-bg); color: var(--yellow); border: 1px solid rgba(183,149,11,0.2); }
+  .tag-mit { background: var(--green-bg); color: var(--green); border: 1px solid rgba(30,132,73,0.2); }
+
+  .section {
+    margin-bottom: 36px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--divider);
+  }
+
+  .section-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  /* [FIX-3] 防止标题换行 */
+  .section-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+
+  .section-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .pattern-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .pattern-tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+    border: 1px solid;
+  }
+
+  /* [FIX-4] 只有蓝/绿/黄/红四种 tag 颜色 */
+  .pattern-tag.danger { background: var(--red-bg); color: var(--red); border-color: rgba(192,57,43,0.2); }
+  .pattern-tag.warning { background: var(--yellow-bg); color: var(--yellow); border-color: rgba(183,149,11,0.2); }
+  .pattern-tag.safe { background: var(--green-bg); color: var(--green); border-color: rgba(30,132,73,0.2); }
+  .pattern-tag.info { background: var(--blue-bg); color: var(--blue); border-color: rgba(36,113,163,0.2); }
+
+  .summary-list {
+    list-style: none;
+    counter-reset: summary;
+  }
+
+  .summary-list li {
+    counter-increment: summary;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--divider);
+    font-size: 13px;
+    color: var(--ink-light);
+    line-height: 1.6;
+  }
+
+  .summary-list li:last-child { border-bottom: none; }
+
+  .summary-list li::before {
+    content: counter(summary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-light);
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+    border: 1px solid rgba(45,95,138,0.15);
+  }
+
+  .radar-section {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    margin-bottom: 28px;
+  }
+
+  .radar-chart { flex-shrink: 0; }
+  .radar-chart text { font-family: 'Inter', sans-serif; }
+  .radar-legend { flex: 1; }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--divider);
+    font-size: 12px;
+  }
+
+  .legend-item:last-child { border-bottom: none; }
+
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .legend-name { flex: 1; color: var(--ink-light); font-weight: 500; }
+  .legend-score { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; }
+
+  .legend-status {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+
+  .legend-status.pass { background: var(--green-bg); color: var(--green); }
+  .legend-status.warn { background: var(--yellow-bg); color: var(--yellow); }
+  .legend-status.fail { background: var(--red-bg); color: var(--red); }
+  .legend-status.na { background: #f0f0f0; color: #999; }
+
+  .radar-legend-keys {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--divider);
+    font-size: 11px;
+    color: var(--ink-muted);
+  }
+
+  .radar-legend-keys span { display: flex; align-items: center; gap: 5px; }
+  .radar-legend-keys span::before { content: ''; display: inline-block; width: 16px; height: 3px; border-radius: 2px; }
+  .key-actual::before { background: var(--accent); }
+  .key-avg::before { background: #8A8A8A; opacity: 0.7; }
+
+  /* [FIX-5] 空章节缺省状态 */
+  .section-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 20px;
+    color: var(--ink-muted);
+    text-align: center;
+  }
+
+  .section-empty-icon {
+    font-size: 20px;
+    margin-bottom: 8px;
+    opacity: 0.35;
+  }
+
+  .section-empty-text {
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  /* Finding & API styles */
+  .finding { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px; overflow: hidden; background: var(--paper); }
+  .finding-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #FAFAF7; border-bottom: 1px solid var(--divider); }
+  .severity-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .severity-dot.critical { background: var(--red); box-shadow: 0 0 6px rgba(192,57,43,0.4); }
+  .severity-dot.high { background: var(--orange); box-shadow: 0 0 6px rgba(211,84,0,0.3); }
+  .severity-dot.medium { background: var(--yellow); }
+  .severity-dot.low { background: var(--green); }
+  .finding-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-muted); background: #F0F0EC; padding: 2px 8px; border-radius: 3px; }
+  .finding-title { font-size: 13px; font-weight: 600; color: var(--ink); flex: 1; }
+  .severity-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 3px 10px; border-radius: 3px; }
+  .severity-badge.critical { background: var(--red-bg); color: var(--red); }
+  .severity-badge.high { background: var(--orange-bg); color: var(--orange); }
+  .severity-badge.medium { background: var(--yellow-bg); color: var(--yellow); }
+  .severity-badge.low { background: var(--green-bg); color: var(--green); }
+  .finding-body { padding: 14px 16px; }
+  .finding-meta { display: flex; gap: 20px; margin-bottom: 10px; font-size: 12px; }
+  .finding-meta-item { display: flex; align-items: center; gap: 5px; color: var(--ink-muted); }
+  .finding-meta-item strong { color: var(--ink-light); }
+  .finding-desc { font-size: 13px; color: var(--ink-light); margin-bottom: 12px; line-height: 1.7; }
+  .finding-recommendation { position: relative; padding: 10px 14px 10px 28px; background: var(--green-bg); border-radius: 4px; border-left: 3px solid var(--green); font-size: 12px; color: var(--ink-light); line-height: 1.7; }
+  .finding-recommendation::before { content: '→'; position: absolute; left: 10px; top: 10px; color: var(--green); font-weight: 700; }
+
+  .api-table { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .api-table thead { background: #F4F2ED; }
+  .api-table th { text-align: left; padding: 10px 14px; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--ink-muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+  .api-table td { padding: 10px 14px; border-bottom: 1px solid var(--divider); vertical-align: middle; }
+  .api-table tr:last-child td { border-bottom: none; }
+  .api-table .endpoint { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); }
+  .method-badge { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 3px; display: inline-block; }
+  .method-badge.get { background: var(--green-bg); color: var(--green); }
+  .method-badge.post { background: var(--blue-bg); color: var(--blue); }
+
+  .compliance-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .compliance-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 5px; background: #FAFAF7; font-size: 12px; }
+  .compliance-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+  .compliance-icon.pass { background: var(--green-bg); color: var(--green); }
+  .compliance-icon.warn { background: var(--yellow-bg); color: var(--yellow); }
+  .compliance-icon.fail { background: var(--red-bg); color: var(--red); }
+  .compliance-text { color: var(--ink-light); font-weight: 500; }
+
+  .rec-list { list-style: none; counter-reset: rec; }
+  .rec-item { counter-increment: rec; display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--divider); align-items: flex-start; }
+  .rec-item:last-child { border-bottom: none; }
+  .rec-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-light); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(45,95,138,0.15); }
+  .rec-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 3px; }
+  .rec-desc { font-size: 12px; color: var(--ink-muted); line-height: 1.6; }
+
+  /* [FIX-6] [FIX-7] 页脚样式改为居中 + 作者信息 */
+  .report-footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    text-align: center;
+  }
+
+  .footer-main {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    color: var(--ink-muted);
+    line-height: 1.8;
+  }
+
+  .footer-main .footer-sep {
+    color: var(--border);
+  }
+
+  .footer-opensource {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--ink-muted);
+    line-height: 1.6;
+  }
+
+  .footer-opensource a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .footer-opensource a:hover {
+    text-decoration: underline;
+  }
+
+
+  .disclaimer {
+    width: 100%;
+    font-size: 11px;
+    color: var(--ink-muted);
+    text-align: center;
+    margin-top: 12px;
+    padding-top: 0;
+    letter-spacing: 0.3px;
+    line-height: 1.6;
+  }
+
+  .watermark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-35deg);
+    font-family: 'Inter', sans-serif;
+    font-size: 100px;
+    font-weight: 900;
+    color: rgba(0,0,0,0.018);
+    letter-spacing: 20px;
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  @media (max-width: 900px) {
+    .content { padding: 32px 28px 28px; }
+    .report-header { flex-direction: column; gap: 16px; }
+    .header-right { text-align: left; margin-left: 0; }
+    .radar-section { flex-direction: column; }
+    .radar-chart svg { width: 260px; height: 260px; }
+    .compliance-grid { grid-template-columns: 1fr; }
+  }
+
+  @page {
+    margin: 12mm 14mm;
+    size: A4;
+  }
+
+  @media print {
+    body { background: white; margin: 0; padding: 0; }
+    .page {
+      box-shadow: none;
+      border: none;
+      margin: 0;
+      padding: 0;
+      max-width: 100%;
+      background: white;
+      background-image: none;
+      border-radius: 0;
+      overflow: visible !important;
+      position: static;
+    }
+    .page::before, .page::after { display: none; }
+    .watermark { display: none; }
+    .content {
+      padding: 0;
+      padding-bottom: 60px; /* 给页脚留空间 */
+      display: block;
+      position: static;
+      z-index: auto;
+    }
+    .report-footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 6px 14mm 1mm;
+      background: white;
+      border-top: 1px solid var(--border);
+    }
+
+    /* 防分页打断 */
+    .section { break-inside: avoid; }
+    .finding { break-inside: avoid; }
+    .rating-section { break-inside: avoid; }
+    .meta-grid { break-inside: avoid; }
+    .report-header { break-inside: avoid; }
+    .report-footer { break-inside: avoid; }
+    .compliance-grid { break-inside: avoid; }
+    .rec-item { break-inside: avoid; }
+
+    /* Header 防换行 */
+    .report-header {
+      flex-direction: row !important;
+      flex-wrap: nowrap !important;
+    }
+    .report-title {
+      font-size: 22px !important;
+    }
+    .report-title .skill-name-highlight {
+      font-size: 24px !important;
+    }
+    .header-right {
+      flex-shrink: 0 !important;
+      min-width: 120px !important;
+    }
+
+    /* Meta 防溢出换行 */
+    .meta-grid {
+      grid-template-columns: 1fr 1fr !important;
+    }
+    .meta-cell {
+      padding: 8px 12px !important;
+      overflow: hidden !important;
+    }
+    .meta-value {
+      font-size: 11px !important;
+      word-break: break-all !important;
+      overflow-wrap: anywhere !important;
+    }
+
+    /* 雷达图强制横排 */
+    .radar-section {
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: flex-start !important;
+      gap: 24px !important;
+    }
+    .radar-chart {
+      flex-shrink: 0 !important;
+    }
+    .radar-chart svg {
+      width: 220px !important;
+      height: 220px !important;
+    }
+    .radar-legend {
+      flex: 1 !important;
+    }
+    .legend-item {
+      padding: 4px 0 !important;
+      font-size: 11px !important;
+    }
+
+    /* Section 标题防换行 */
+    .section-header {
+      flex-wrap: nowrap !important;
+      margin-bottom: 12px !important;
+    }
+    .section-title {
+      white-space: nowrap !important;
+      font-size: 15px !important;
+    }
+    .section-count {
+      white-space: nowrap !important;
+    }
+
+    /* Rating 评分条防换行 */
+    .rating-section {
+      flex-wrap: nowrap !important;
+      gap: 24px !important;
+      margin-bottom: 24px !important;
+    }
+    .rating-stamp {
+      width: 120px !important;
+      height: 120px !important;
+    }
+    .stamp-grade {
+      font-size: 44px !important;
+    }
+    .rating-eval {
+      font-size: 12px !important;
+      padding: 8px 12px !important;
+    }
+    .score-number {
+      font-size: 28px !important;
+      white-space: nowrap !important;
+    }
+
+    /* Tags 紧凑 */
+    .pattern-tags {
+      gap: 6px !important;
+      margin-bottom: 14px !important;
+    }
+    .pattern-tag {
+      font-size: 10px !important;
+      padding: 3px 10px !important;
+      white-space: nowrap !important;
+    }
+
+    /* Summary 紧凑 */
+    .summary-list li {
+      padding: 5px 0 !important;
+      font-size: 12px !important;
+    }
+
+    /* Finding 紧凑 */
+    .finding { margin-bottom: 10px !important; }
+    .finding-header { flex-wrap: nowrap !important; }
+    .finding-title { font-size: 12px !important; }
+    .finding-body { padding: 10px 14px !important; }
+    .finding-desc { font-size: 12px !important; margin-bottom: 8px !important; }
+    .code-evidence { font-size: 10px !important; padding: 10px 14px !important; margin-bottom: 8px !important; }
+
+    /* Compliance 双列紧凑 */
+    .compliance-grid {
+      grid-template-columns: 1fr 1fr !important;
+      gap: 6px !important;
+    }
+    .compliance-item {
+      padding: 6px 10px !important;
+      font-size: 11px !important;
+    }
+
+    /* 建议紧凑 */
+    .rec-item { padding: 8px 0 !important; }
+    .rec-desc { font-size: 11px !important; }
+
+    /* 页脚紧凑 */
+    .report-footer { margin-top: 24px !important; }
+    .footer-main { flex-wrap: nowrap !important; gap: 16px !important; }
+
+    /* API 表格防溢出 */
+    .api-table { font-size: 11px !important; }
+    .api-table th, .api-table td { padding: 6px 10px !important; }
+    .api-table .endpoint { word-break: break-all !important; }
+  }
+</style>
+</head>
+<body data-stamp-color="green">
+
+<div class="page">
+  <div class="watermark">COCOLOOP</div>
+  <div class="content">
+
+    <!-- [FIX-1] Header: 标题改为 {技能名称} - CLS 安全认证报告 -->
+    <header class="report-header">
+      <div class="header-left">
+        <h1 class="report-title">CLS 安全认证报告<br><span class="skill-name-highlight">summarize</span></h1>
+        <p class="report-subtitle">Skill Security Certification Report — 六维深度检测</p>
+        <span class="report-version">CLS-Certify v2.0 · Full Scan</span>
+      </div>
+      <div class="header-right">
+        <div class="report-id">NO. CLS-2026-0317-B4E2</div>
+        <div class="report-date">2026 年 3 月 17 日 15:42:08 CST</div>
+        <!-- [FIX-2] QR 码：CLS GitHub 仓库 -->
+        <div class="qr-code">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=https://github.com/anthropics/cls-certify&margin=4" alt="CLS GitHub">
+        </div>
+      </div>
+    </header>
+
+    <!-- Rating -->
+    <div class="rating-section">
+      <div class="stamp-container">
+        <div class="rating-stamp">
+          <svg viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="70" cy="70" r="66" fill="none" stroke="#1B7A3D" stroke-width="4"/>
+            <circle cx="70" cy="70" r="58" fill="none" stroke="#1B7A3D" stroke-width="1.5"/>
+            <defs>
+              <path id="topArc" d="M 25,70 a 45,45 0 1,1 90,0" fill="none"/>
+              <path id="bottomArc" d="M 115,70 a 45,45 0 1,1 -90,0" fill="none"/>
+            </defs>
+            <text font-size="9" font-weight="700" fill="#1B7A3D" letter-spacing="4">
+              <textPath href="#topArc" startOffset="50%" text-anchor="middle">★ COCOLOOP ★</textPath>
+            </text>
+            <text font-size="9" font-weight="700" fill="#1B7A3D" letter-spacing="4">
+              <textPath href="#bottomArc" startOffset="50%" text-anchor="middle">★ CERTIFIED ★</textPath>
+            </text>
+          </svg>
+          <span class="stamp-grade">A</span>
+          <span class="stamp-label">Grade</span>
+        </div>
+      </div>
+      <div class="rating-info">
+        <div class="rating-score-bar">
+          <span class="score-number">78<span class="score-max"> / 100</span></span>
+          <div class="score-track"><div class="score-fill" style="width:78%"></div></div>
+        </div>
+        <div class="rating-eval">
+          标准安全级别。代码结构规范，无高危后门或数据外泄行为。发现少量中低风险项，建议按建议优化。
+        </div>
+      </div>
+    </div>
+
+    <!-- Meta Grid -->
+    <div class="meta-grid">
+      <div class="meta-cell">
+        <span class="meta-label">技能名称</span>
+        <span class="meta-value">summarize</span>
+      </div>
+      <div class="meta-cell">
+        <span class="meta-label">版本</span>
+        <span class="meta-value">v1.0.0</span>
+      </div>
+      <div class="meta-cell">
+        <span class="meta-label">来源路径</span>
+        <span class="meta-value" style="font-size:11px;">~/.claude/skills/summarize</span>
+      </div>
+      <div class="meta-cell">
+        <span class="meta-label">来源可信度</span>
+        <span class="meta-value"><span class="tag tag-t2">T2 · 社区来源</span></span>
+      </div>
+      <div class="meta-cell">
+        <span class="meta-label">维护者</span>
+        <span class="meta-value">anthropic-community</span>
+      </div>
+      <div class="meta-cell">
+        <span class="meta-label">许可证</span>
+        <span class="meta-value"><span class="tag tag-mit">MIT</span></span>
+      </div>
+      <div class="meta-cell">
+        <span class="meta-label">扫描耗时</span>
+        <span class="meta-value">12.8s</span>
+      </div>
+      <div class="meta-cell">
+        <span class="meta-label">代码行数</span>
+        <span class="meta-value">342 lines · 5 files</span>
+      </div>
+      <div class="meta-cell">
+        <span class="meta-label">Skill 分类</span>
+        <span class="meta-value"><span class="tag" style="background:var(--accent-light);color:var(--accent);border:1px solid rgba(45,95,138,0.2);">T-LITE · 轻量代码</span></span>
+      </div>
+      <div class="meta-cell">
+        <span class="meta-label">扫描策略</span>
+        <span class="meta-value">auto</span>
+      </div>
+    </div>
+
+    <!-- [FIX-3] 结果概览 - 标题不换行 -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon" style="background:var(--accent-light);color:var(--accent);">◉</div>
+        <h2 class="section-title">结果概览</h2>
+        <span class="section-count">共发现 4 项</span>
+      </div>
+
+      <!-- [FIX-4] Tags 只有四种颜色 -->
+      <div class="pattern-tags">
+        <span class="pattern-tag safe">无危险函数调用</span>
+        <span class="pattern-tag safe">无敏感信息泄露</span>
+        <span class="pattern-tag warning">外部网络请求</span>
+        <span class="pattern-tag info">Skill 分类: T-LITE</span>
+        <span class="pattern-tag danger">发现 1 个 high 级别风险</span>
+      </div>
+
+      <ol class="summary-list">
+        <li>发现 <strong>1 个 high</strong> 级别和 <strong>3 个 medium</strong> 级别安全风险项</li>
+        <li>代码中使用 <code>fetch()</code> 进行外部 API 调用，数据传输已加密</li>
+        <li>未检测到提示词注入、权限升级或 Agent 上下文注入行为</li>
+        <li>依赖项均为已知安全包，无 CVE 漏洞和 typosquatting 风险</li>
+      </ol>
+    </div>
+
+    <!-- Six Dimensions Radar -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon" style="background:var(--accent-light);color:var(--accent);">⬡</div>
+        <h2 class="section-title">六维检测结果</h2>
+      </div>
+      <div class="radar-section">
+        <div class="radar-chart">
+          <svg viewBox="0 0 300 300" width="280" height="280" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="150,128 169,139 169,161 150,172 131,161 131,139" fill="none" stroke="#E8E0D4" stroke-width="0.5"/>
+            <polygon points="150,106 188,128 188,172 150,194 112,172 112,128" fill="none" stroke="#E8E0D4" stroke-width="0.5"/>
+            <polygon points="150,84 207,117 207,183 150,216 93,183 93,117" fill="none" stroke="#E8E0D4" stroke-width="0.5"/>
+            <polygon points="150,62 226,106 226,194 150,238 74,194 74,106" fill="none" stroke="#E8E0D4" stroke-width="0.5"/>
+            <polygon points="150,40 245,95 245,205 150,260 55,205 55,95" fill="none" stroke="#D5CFC4" stroke-width="0.8"/>
+            <line x1="150" y1="150" x2="150" y2="40" stroke="#D5CFC4" stroke-width="0.5"/>
+            <line x1="150" y1="150" x2="245" y2="95" stroke="#D5CFC4" stroke-width="0.5"/>
+            <line x1="150" y1="150" x2="245" y2="205" stroke="#D5CFC4" stroke-width="0.5"/>
+            <line x1="150" y1="150" x2="150" y2="260" stroke="#D5CFC4" stroke-width="0.5"/>
+            <line x1="150" y1="150" x2="55" y2="205" stroke="#D5CFC4" stroke-width="0.5"/>
+            <line x1="150" y1="150" x2="55" y2="95" stroke="#D5CFC4" stroke-width="0.5"/>
+            <!-- Average -->
+            <polygon points="150,73 216.5,105.5 216.5,194.5 150,227 83.5,194.5 83.5,105.5"
+              fill="rgba(138,138,138,0.08)" stroke="#8A8A8A" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.7"/>
+            <!-- Actual -->
+            <polygon points="150,56.2 236.3,99.7 236.3,200.3 150,243.8 73.2,187.3 73.2,112.7"
+              fill="rgba(45,95,138,0.12)" stroke="var(--accent)" stroke-width="2"/>
+            <circle cx="150" cy="56.2" r="3.5" fill="var(--accent)"/>
+            <circle cx="236.3" cy="99.7" r="3.5" fill="var(--accent)"/>
+            <circle cx="236.3" cy="200.3" r="3.5" fill="var(--accent)"/>
+            <circle cx="150" cy="243.8" r="3.5" fill="var(--accent)"/>
+            <circle cx="73.2" cy="187.3" r="3.5" fill="var(--accent)"/>
+            <circle cx="73.2" cy="112.7" r="3.5" fill="var(--accent)"/>
+            <!-- Labels -->
+            <text x="150" y="28" text-anchor="middle" font-size="11" fill="#4A4A4A" font-weight="500">静态分析</text>
+            <text x="255" y="93" text-anchor="start" font-size="11" fill="#4A4A4A" font-weight="500">动态分析</text>
+            <text x="255" y="212" text-anchor="start" font-size="11" fill="#4A4A4A" font-weight="500">依赖审计</text>
+            <text x="150" y="278" text-anchor="middle" font-size="11" fill="#4A4A4A" font-weight="500">网络分析</text>
+            <text x="45" y="212" text-anchor="end" font-size="11" fill="#4A4A4A" font-weight="500">隐私合规</text>
+            <text x="45" y="93" text-anchor="end" font-size="11" fill="#4A4A4A" font-weight="500">威胁情报</text>
+          </svg>
+        </div>
+        <div class="radar-legend">
+          <div class="legend-item"><span class="legend-dot" style="background:var(--green);"></span><span class="legend-name">静态代码分析</span><span class="legend-score" style="color:var(--green);">85</span><span class="legend-status pass">✓ 通过</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:var(--green);"></span><span class="legend-name">动态行为分析</span><span class="legend-score" style="color:var(--green);">90</span><span class="legend-status pass">✓ 通过</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:var(--green);"></span><span class="legend-name">依赖审计</span><span class="legend-score" style="color:var(--green);">88</span><span class="legend-status pass">✓ 通过</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:var(--yellow);"></span><span class="legend-name">网络流量分析</span><span class="legend-score" style="color:var(--yellow);">65</span><span class="legend-status warn">⚠ 警告</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:var(--green);"></span><span class="legend-name">隐私合规</span><span class="legend-score" style="color:var(--green);">82</span><span class="legend-status pass">✓ 通过</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:var(--green);"></span><span class="legend-name">威胁情报</span><span class="legend-score" style="color:var(--green);">80</span><span class="legend-status pass">✓ 通过</span></div>
+          <div class="radar-legend-keys">
+            <span class="key-actual">当前 Skill</span>
+            <span class="key-avg">平均水平</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- [FIX-5] External APIs - 空章节缺省 -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon" style="background:var(--blue-bg);color:var(--blue);">⊕</div>
+        <h2 class="section-title">外部 API 调用</h2>
+        <span class="section-count">共 0 个端点</span>
+      </div>
+
+      <div class="section-empty">
+        <div class="section-empty-icon">🔗</div>
+        <div class="section-empty-text">无外部 API 调用</div>
+      </div>
+    </div>
+
+    <!-- Findings -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon" style="background:var(--orange-bg);color:var(--orange);">⚠</div>
+        <h2 class="section-title">敏感风险点</h2>
+        <span class="section-count">共 2 项发现</span>
+      </div>
+
+      <div class="finding">
+        <div class="finding-header">
+          <span class="severity-dot high"></span>
+          <span class="finding-id">RISK-001</span>
+          <span class="finding-title">外部网络请求未验证响应</span>
+          <span class="severity-badge high">HIGH</span>
+        </div>
+        <div class="finding-body">
+          <div class="finding-meta">
+            <span class="finding-meta-item">📁 <strong>index.js:42</strong></span>
+            <span class="finding-meta-item">🏷 <strong>network_request</strong></span>
+          </div>
+          <div class="finding-desc">
+            使用 <code>fetch()</code> 调用外部 URL 但未对响应内容进行校验，可能导致注入攻击。
+          </div>
+          <div class="finding-recommendation">
+            建议对 fetch 响应添加 Content-Type 校验和内容长度限制，避免恶意响应注入。
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-header">
+          <span class="severity-dot medium"></span>
+          <span class="finding-id">RISK-002</span>
+          <span class="finding-title">未使用 HTTPS 的 URL 引用</span>
+          <span class="severity-badge medium">MEDIUM</span>
+        </div>
+        <div class="finding-body">
+          <div class="finding-meta">
+            <span class="finding-meta-item">📁 <strong>config.js:15</strong></span>
+            <span class="finding-meta-item">🏷 <strong>insecure_transport</strong></span>
+          </div>
+          <div class="finding-desc">
+            配置文件中存在 <code>http://</code> 协议的 URL，传输未加密，存在中间人攻击风险。
+          </div>
+          <div class="finding-recommendation">
+            将所有 HTTP URL 升级为 HTTPS，确保数据传输安全。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compliance -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon" style="background:var(--green-bg);color:var(--green);">☑</div>
+        <h2 class="section-title">隐私合规检查</h2>
+      </div>
+      <div class="compliance-grid">
+        <div class="compliance-item"><span class="compliance-icon pass">✓</span><span class="compliance-text">数据使用目的明确声明</span></div>
+        <div class="compliance-item"><span class="compliance-icon pass">✓</span><span class="compliance-text">无过度数据收集行为</span></div>
+        <div class="compliance-item"><span class="compliance-icon pass">✓</span><span class="compliance-text">环境变量访问范围合理</span></div>
+        <div class="compliance-item"><span class="compliance-icon warn">!</span><span class="compliance-text">未明确声明数据保留策略</span></div>
+        <div class="compliance-item"><span class="compliance-icon pass">✓</span><span class="compliance-text">无 MCP 工具滥用风险</span></div>
+        <div class="compliance-item"><span class="compliance-icon pass">✓</span><span class="compliance-text">无 Agent 上下文注入风险</span></div>
+      </div>
+    </div>
+
+    <!-- Recommendations -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon" style="background:var(--accent-light);color:var(--accent);">↑</div>
+        <h2 class="section-title">安全改进建议</h2>
+      </div>
+      <ul class="rec-list">
+        <li class="rec-item">
+          <span class="rec-num">1</span>
+          <div class="rec-content">
+            <div class="rec-title">验证外部 API 响应内容</div>
+            <div class="rec-desc">对所有 fetch 响应添加 Content-Type 校验、内容长度限制和 JSON Schema 验证，防止恶意响应注入。</div>
+          </div>
+        </li>
+        <li class="rec-item">
+          <span class="rec-num">2</span>
+          <div class="rec-content">
+            <div class="rec-title">升级 HTTP 为 HTTPS</div>
+            <div class="rec-desc">将配置中的 http:// URL 统一升级为 https://，确保所有数据传输加密。</div>
+          </div>
+        </li>
+        <li class="rec-item">
+          <span class="rec-num">3</span>
+          <div class="rec-content">
+            <div class="rec-title">补充数据保留策略声明</div>
+            <div class="rec-desc">在 SKILL.md 中明确声明数据的保留时间和清理方式，满足 GDPR/CCPA 合规要求。</div>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    </div><!-- end .content -->
+
+    <footer class="report-footer">
+      <div class="footer-main">
+        <span>CLS-Certify v2.0 · 六维深度检测</span>
+        <span class="footer-sep">|</span>
+        <span>威胁库: 140+ patterns</span>
+        <span class="footer-sep">|</span>
+        <span style="font-family:'JetBrains Mono',monospace;">sha256:b4e2c9...f1d8</span>
+      </div>
+      <div class="disclaimer">
+        本认证结果仅反映扫描时刻的安全状态，不代表运行时绝对安全。建议定期复检并关注依赖更新。
+      </div>
+      <div class="footer-opensource">
+        Open Source · MIT License · <a href="https://github.com/catrefuse/cls-certify" target="_blank">github.com/catrefuse/cls-certify</a>
+      </div>
+    </footer>
+
+</div><!-- end .page -->
+
+</body>
+</html>

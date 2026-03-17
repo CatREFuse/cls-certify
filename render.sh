@@ -287,6 +287,13 @@ while IFS='|' read -r _ endpoint method reputation encryption data_types provide
   API_COUNT=$((API_COUNT + 1))
 done <<< "$API_SECTION"
 
+# ─── 生成 API 章节 HTML（空时显示缺省） ───
+if [[ $API_COUNT -eq 0 ]]; then
+  APIS_SECTION_HTML='<div class="section-empty"><div class="section-empty-icon">🔗</div><div class="section-empty-text">无外部 API 调用</div></div>'
+else
+  APIS_SECTION_HTML="<table class=\"api-table\"><thead><tr><th>端点</th><th>方法</th><th>信誉</th><th>加密</th><th>数据类型</th><th>提供商</th></tr></thead><tbody>${APIS_HTML}</tbody></table>"
+fi
+
 # ─── 解析 body: findings ───
 FINDINGS_HTML=""
 FINDINGS_COUNT=0
@@ -473,7 +480,7 @@ CLS_REPLACE_VALUE="$SUMMARY_HTML" perl -pi -e 's/\Q{{SUMMARY_HTML}}\E/$ENV{CLS_R
 CLS_REPLACE_VALUE="$POLYGON_POINTS" perl -pi -e 's/\Q{{RADAR_POLYGON_POINTS}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$DOTS_HTML" perl -pi -e 's/\Q{{RADAR_DOTS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$LEGEND_HTML" perl -pi -e 's/\Q{{RADAR_LEGEND_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
-CLS_REPLACE_VALUE="$APIS_HTML" perl -pi -e 's/\Q{{APIS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+CLS_REPLACE_VALUE="$APIS_SECTION_HTML" perl -pi -e 's/\Q{{APIS_SECTION_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$FINDINGS_HTML" perl -pi -e 's/\Q{{FINDINGS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$COMPLIANCE_HTML" perl -pi -e 's/\Q{{COMPLIANCE_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$RECOMMENDATIONS_HTML" perl -pi -e 's/\Q{{RECOMMENDATIONS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
@@ -513,7 +520,7 @@ if [[ "$GENERATE_PDF" -eq 1 ]]; then
     FILE_URL="file://${ABS_OUTPUT}"
 
     "$CHROME" \
-      --headless \
+      --headless=new \
       --disable-gpu \
       --no-sandbox \
       --print-to-pdf="$PDF_OUTPUT" \

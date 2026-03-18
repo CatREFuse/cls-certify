@@ -131,13 +131,15 @@
 
   .pattern-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
   .pattern-tag { font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 20px; letter-spacing: 0.3px; border: 1px solid; }
-  .pattern-tag.danger { background: var(--red-bg); color: var(--red); border-color: rgba(192,57,43,0.2); }
-  .pattern-tag.warning { background: var(--yellow-bg); color: var(--yellow); border-color: rgba(183,149,11,0.2); }
-  .pattern-tag.safe { background: var(--green-bg); color: var(--green); border-color: rgba(30,132,73,0.2); }
+  .pattern-tag.danger, .pattern-tag.critical { background: var(--red-bg); color: var(--red); border-color: rgba(192,57,43,0.2); }
+  .pattern-tag.warning, .pattern-tag.medium { background: var(--yellow-bg); color: var(--yellow); border-color: rgba(183,149,11,0.2); }
+  .pattern-tag.safe, .pattern-tag.low { background: var(--green-bg); color: var(--green); border-color: rgba(30,132,73,0.2); }
   .pattern-tag.info { background: var(--blue-bg); color: var(--blue); border-color: rgba(36,113,163,0.2); }
+  .pattern-tag.high { background: var(--orange-bg); color: var(--orange); border-color: rgba(211,84,0,0.2); }
 
   .summary-list { list-style: none; counter-reset: summary; }
   .summary-list li { counter-increment: summary; display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--divider); font-size: 13px; color: var(--ink-light); line-height: 1.6; }
+  .summary-list li .summary-text { flex: 1; min-width: 0; }
   .summary-list li:last-child { border-bottom: none; }
   .summary-list li::before { content: counter(summary); font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--accent); background: var(--accent-light); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; border: 1px solid rgba(45,95,138,0.15); }
 
@@ -225,7 +227,7 @@
   .rec-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 3px; }
   .rec-desc { font-size: 12px; color: var(--ink-muted); line-height: 1.6; }
 
-  .report-footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid var(--ink); text-align: center; }
+  .report-footer { margin-top: 40px; padding: 20px 0 32px; border-top: 2px solid var(--ink); text-align: center; }
   .footer-main { display: flex; justify-content: center; align-items: center; gap: 24px; flex-wrap: wrap; font-size: 11px; color: var(--ink-muted); line-height: 1.8; }
   .footer-main .footer-sep { color: var(--border); }
   .footer-opensource { margin-top: 8px; font-size: 11px; color: var(--ink-muted); line-height: 1.6; }
@@ -459,7 +461,7 @@
       <span class="footer-sep">|</span>
       <span>威胁库: 140+ patterns</span>
       <span class="footer-sep">|</span>
-      <span style="font-family:'JetBrains Mono',monospace;">{{sample_hash}}</span>
+      <span style="font-family:'JetBrains Mono',monospace;cursor:help;" title="{{sample_hash}}">{{sample_hash_short}}</span>
     </div>
     <div class="disclaimer">{{disclaimer}}</div>
     <div class="footer-opensource">

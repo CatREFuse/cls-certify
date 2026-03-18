@@ -219,7 +219,16 @@ while IFS= read -r line; do
   severity=$(echo "$line" | sed -E 's/^- ([a-z]+):.*/\1/')
   text=$(echo "$line" | sed -E 's/^- [a-z]+:[[:space:]]*//')
   text=$(md_inline_to_html "$text")
-  TAGS_HTML+="<span class=\"pattern-tag ${severity}\">${text}</span>"
+  # 映射 severity → CSS 类名
+  case "$severity" in
+    info)     tag_class="info" ;;
+    low)      tag_class="low" ;;
+    medium)   tag_class="medium" ;;
+    high)     tag_class="high" ;;
+    critical) tag_class="critical" ;;
+    *)        tag_class="info" ;;
+  esac
+  TAGS_HTML+="<span class=\"pattern-tag ${tag_class}\">${text}</span>"
 done <<< "$TAGS_SECTION"
 
 # ─── 解析 body: summary ───
@@ -229,7 +238,7 @@ while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   text=$(echo "$line" | sed -E 's/^[0-9]+\.[[:space:]]*//')
   text=$(md_inline_to_html "$text")
-  SUMMARY_HTML+="<li>${text}</li>"
+  SUMMARY_HTML+="<li><span class=\"summary-text\">${text}</span></li>"
 done <<< "$SUMMARY_SECTION"
 
 # ─── 解析 body: external_apis ───
@@ -461,6 +470,15 @@ replace_placeholder "score" "$SCORE"
 replace_placeholder "stamp_color" "$STAMP_COLOR"
 replace_placeholder "stamp_svg_color" "$STAMP_SVG_COLOR"
 replace_placeholder "total_findings" "$TOTAL_FINDINGS"
+# SHA 缩写: sha256:abcd1234...ef567890
+if [[ ${#SAMPLE_HASH} -gt 20 ]]; then
+  HASH_PREFIX="${SAMPLE_HASH:0:15}"
+  HASH_SUFFIX="${SAMPLE_HASH: -8}"
+  SAMPLE_HASH_SHORT="${HASH_PREFIX}...${HASH_SUFFIX}"
+else
+  SAMPLE_HASH_SHORT="$SAMPLE_HASH"
+fi
+replace_placeholder "sample_hash_short" "$SAMPLE_HASH_SHORT"
 replace_placeholder "sample_hash" "$SAMPLE_HASH"
 replace_placeholder "disclaimer" "$DISCLAIMER"
 replace_placeholder "recommendations_title" "$REC_TITLE"
@@ -481,8 +499,16 @@ CLS_REPLACE_VALUE="$POLYGON_POINTS" perl -pi -e 's/\Q{{RADAR_POLYGON_POINTS}}\E/
 CLS_REPLACE_VALUE="$DOTS_HTML" perl -pi -e 's/\Q{{RADAR_DOTS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$LEGEND_HTML" perl -pi -e 's/\Q{{RADAR_LEGEND_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$APIS_SECTION_HTML" perl -pi -e 's/\Q{{APIS_SECTION_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+# 空段落缺省图标
+if [[ $FINDINGS_COUNT -eq 0 ]]; then
+  FINDINGS_HTML='<div class="section-empty"><div class="section-empty-icon">&#x2714;</div><div class="section-empty-text">未发现敏感风险点</div></div>'
+fi
 CLS_REPLACE_VALUE="$FINDINGS_HTML" perl -pi -e 's/\Q{{FINDINGS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 CLS_REPLACE_VALUE="$COMPLIANCE_HTML" perl -pi -e 's/\Q{{COMPLIANCE_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
+# 空提升建议缺省图标
+if [[ -z "$RECOMMENDATIONS_HTML" ]]; then
+  RECOMMENDATIONS_HTML='<div class="section-empty"><div class="section-empty-icon">&#x2605;</div><div class="section-empty-text">暂无提升建议</div></div>'
+fi
 CLS_REPLACE_VALUE="$RECOMMENDATIONS_HTML" perl -pi -e 's/\Q{{RECOMMENDATIONS_HTML}}\E/$ENV{CLS_REPLACE_VALUE}/g' "$OUTPUT"
 
 # ─── 验证 ───

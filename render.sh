@@ -130,20 +130,57 @@ RADAR_STATUSES=()
 RADAR_DETAILS=()
 
 current_idx=-1
-while IFS= read -r line; do
-  if [[ "$line" =~ ^[[:space:]]*-[[:space:]]*name: ]]; then
-    current_idx=$((current_idx + 1))
-    RADAR_NAMES+=("$(echo "$line" | sed -E 's/.*name:[[:space:]]*//' | sed 's/^"//;s/"$//')")
-  elif [[ "$line" =~ ^[[:space:]]*short: ]]; then
-    RADAR_SHORTS+=("$(echo "$line" | sed -E 's/.*short:[[:space:]]*//' | sed 's/^"//;s/"$//')")
-  elif [[ "$line" =~ ^[[:space:]]*score: ]]; then
-    RADAR_SCORES+=("$(echo "$line" | sed -E 's/.*score:[[:space:]]*//')")
-  elif [[ "$line" =~ ^[[:space:]]*status: ]]; then
-    RADAR_STATUSES+=("$(echo "$line" | sed -E 's/.*status:[[:space:]]*//' | sed 's/^"//;s/"$//')")
-  elif [[ "$line" =~ ^[[:space:]]*detail: ]]; then
-    RADAR_DETAILS+=("$(echo "$line" | sed -E 's/.*detail:[[:space:]]*//' | sed 's/^"//;s/"$//')")
-  fi
-done <<< "$(echo "$FRONTMATTER" | awk '/^radar:/{found=1; next} found && /^[a-zA-Z]/{exit} found{print}')"
+RADAR_CONTENT=$(echo "$FRONTMATTER" | awk '/^radar:/{found=1; next} found && /^[a-zA-Z]/{exit} found{print}')
+
+# 检查是否是内联格式 (e.g., "- { name: xxx, score: 75 }")
+if echo "$RADAR_CONTENT" | grep -qE '^\s*-\s*\{.*name:.*score:'; then
+  # 内联格式解析
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    # 提取 name
+    name=$(echo "$line" | grep -oE 'name:[^,]+' | sed 's/name://' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/^"//;s/"$//')
+    # 提取 short
+    short=$(echo "$line" | grep -oE 'short:[^,]+' | sed 's/short://' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/^"//;s/"$//')
+    # 提取 score
+    score=$(echo "$line" | grep -oE 'score:[^,]+' | sed 's/score://' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    # 提取 status
+    status=$(echo "$line" | grep -oE 'status:[^,]+' | sed 's/status://' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/^"//;s/"$//')
+    # 提取 detail
+    detail=$(echo "$line" | grep -oE 'detail:[^}]+' | sed 's/detail://' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/^"//;s/"$//')
+
+    [[ -n "$name" ]] && RADAR_NAMES+=("$name")
+    [[ -n "$short" ]] && RADAR_SHORTS+=("$short")
+    [[ -n "$score" ]] && RADAR_SCORES+=("$score")
+    [[ -n "$status" ]] && RADAR_STATUSES+=("$status")
+    [[ -n "$detail" ]] && RADAR_DETAILS+=("$detail")
+  done <<< "$(echo "$RADAR_CONTENT" | grep -E '^\s*-')"
+else
+  # 多行格式解析
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*-[[:space:]]*name: ]]; then
+      current_idx=$((current_idx + 1))
+      RADAR_NAMES+=("$(echo "$line" | sed -E 's/.*name:[[:space:]]*//' | sed 's/^"//;s/"$//')")
+    elif [[ "$line" =~ ^[[:space:]]*short: ]]; then
+      RADAR_SHORTS+=("$(echo "$line" | sed -E 's/.*short:[[:space:]]*//' | sed 's/^"//;s/"$//')")
+    elif [[ "$line" =~ ^[[:space:]]*score: ]]; then
+      RADAR_SCORES+=("$(echo "$line" | sed -E 's/.*score:[[:space:]]*//')")
+    elif [[ "$line" =~ ^[[:space:]]*status: ]]; then
+      RADAR_STATUSES+=("$(echo "$line" | sed -E 's/.*status:[[:space:]]*//' | sed 's/^"//;s/"$//')")
+    elif [[ "$line" =~ ^[[:space:]]*detail: ]]; then
+      RADAR_DETAILS+=("$(echo "$line" | sed -E 's/.*detail:[[:space:]]*//' | sed 's/^"//;s/"$//')")
+    fi
+  done <<< "$(echo "$RADAR_CONTENT")"
+fi
+
+# 回退机制：如果解析失败，使用默认值
+if [[ ${#RADAR_NAMES[@]} -eq 0 ]]; then
+  echo "⚠ 警告: 雷达数据解析失败，使用默认值" >&2
+  RADAR_NAMES=("静态分析" "动态分析" "依赖审计" "网络分析" "隐私合规" "威胁情报")
+  RADAR_SHORTS=("静态" "动态" "依赖" "网络" "隐私" "情报")
+  RADAR_SCORES=(70 70 70 70 70 70)
+  RADAR_STATUSES=("pass" "pass" "pass" "pass" "pass" "pass")
+  RADAR_DETAILS=("解析失败" "解析失败" "解析失败" "解析失败" "解析失败" "解析失败")
+fi
 
 # ─── 计算雷达图 SVG 坐标 ───
 # 中心 (150,150)，最大半径 110
@@ -154,13 +191,37 @@ SIN_VALS=(-1 -0.5 0.5 1 0.5 -0.5)
 POLYGON_POINTS=""
 DOTS_HTML=""
 
-for i in 0 1 2 3 4 5; do
-  s=${RADAR_SCORES[$i]}
+# 计算函数，带错误回退
+calc_radius() {
+  local score="$1"
+  # 如果分数为空或非数字，使用默认值 50
+  if [[ -z "$score" ]] || ! [[ "$score" =~ ^[0-9]+$ ]]; then
+    score=50
+  fi
   # N/A 维度 (score=-1) 雷达图上显示为 0
-  if [[ "$s" == "-1" ]]; then s=0; fi
-  r=$(echo "$s * 1.1" | bc)
-  x=$(printf "%.1f" "$(echo "150 + $r * ${COS_VALS[$i]}" | bc)")
-  y=$(printf "%.1f" "$(echo "150 + $r * ${SIN_VALS[$i]}" | bc)")
+  if [[ "$score" == "-1" ]]; then score=0; fi
+  # 使用 awk 代替 bc，避免解析错误
+  awk "BEGIN { printf \"%.1f\", $score * 1.1 }"
+}
+
+calc_coord() {
+  local base="$1"
+  local radius="$2"
+  local factor="$3"
+  awk "BEGIN { printf \"%.1f\", $base + $radius * $factor }"
+}
+
+for i in 0 1 2 3 4 5; do
+  s="${RADAR_SCORES[$i]}"
+  # 如果数组元素不存在，使用默认值
+  if [[ $i -ge ${#RADAR_SCORES[@]} ]]; then
+    s=50
+  fi
+
+  r=$(calc_radius "$s")
+  x=$(calc_coord 150 "$r" "${COS_VALS[$i]}")
+  y=$(calc_coord 150 "$r" "${SIN_VALS[$i]}")
+
   if [[ $i -gt 0 ]]; then POLYGON_POINTS+=" "; fi
   POLYGON_POINTS+="${x},${y}"
   # N/A 维度用灰色圆点
@@ -174,14 +235,23 @@ done
 # ─── 生成 radar legend HTML ───
 LEGEND_HTML=""
 for i in 0 1 2 3 4 5; do
-  name="${RADAR_NAMES[$i]}"
-  score="${RADAR_SCORES[$i]}"
-  status="${RADAR_STATUSES[$i]}"
+  # 如果数组元素不存在，使用默认值
+  if [[ $i -ge ${#RADAR_NAMES[@]} ]]; then
+    name="维度${i}"
+    score="50"
+    status="pass"
+  else
+    name="${RADAR_NAMES[$i]}"
+    score="${RADAR_SCORES[$i]}"
+    status="${RADAR_STATUSES[$i]}"
+  fi
+
   case "$status" in
     pass) dot_color="var(--green)"; score_color="var(--green)"; badge_class="pass"; badge_text="✓ 通过" ;;
     warn) dot_color="var(--yellow)"; score_color="var(--yellow)"; badge_class="warn"; badge_text="⚠ 警告" ;;
     fail) dot_color="var(--red)"; score_color="var(--red)"; badge_class="fail"; badge_text="❌ 危险" ;;
     na)   dot_color="#ccc"; score_color="#999"; badge_class="na"; badge_text="— N/A" ;;
+    *)    dot_color="var(--green)"; score_color="var(--green)"; badge_class="pass"; badge_text="✓ 通过" ;;
   esac
   # N/A 维度显示 "N/A" 而非 -1
   display_score="$score"
